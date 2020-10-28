@@ -1,0 +1,6 @@
+[submodule "agora"]
+	path = submodules/agora
+	url = https://github.com/bpfkorea/agora.git
+[submodule "ocean"]
+	path = submodules/ocean
+	url = https://github.com/bpfkorea/ocean.git
