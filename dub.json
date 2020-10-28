@@ -1,0 +1,45 @@
+{
+    "name": "faucet",
+    "description": "Your friendly transaction-happy bot",
+
+    "targetPath": "bin/",
+
+    "authors": [ "BPF Korea" ],
+    "copyright": "Copyright © 2020, BPF Korea",
+    "license": "MIT",
+
+    "sourceFiles": [
+        "submodules/agora/source/agora/api/FullNode.d",
+        "submodules/agora/source/agora/common/Amount.d",
+        "submodules/agora/source/agora/common/BitField.d",
+        "submodules/agora/source/agora/common/crypto/Crc16.d",
+        "submodules/agora/source/agora/common/crypto/ECC.d",
+        "submodules/agora/source/agora/common/crypto/Key.d",
+        "submodules/agora/source/agora/common/crypto/Schnorr.d",
+        "submodules/agora/source/agora/common/Hash.d",
+        "submodules/agora/source/agora/common/Serializer.d",
+        "submodules/agora/source/agora/common/Set.d",
+        "submodules/agora/source/agora/common/Types.d",
+        "submodules/agora/source/agora/common/ManagedDatabase.d",
+        "submodules/agora/source/agora/consensus/data/genesis/Test.d",
+        "submodules/agora/source/agora/consensus/data/Block.d",
+        "submodules/agora/source/agora/consensus/data/Enrollment.d",
+        "submodules/agora/source/agora/consensus/data/Transaction.d",
+        "submodules/agora/source/agora/consensus/data/UTXOSetValue.d",
+        "submodules/agora/source/agora/consensus/data/PreImageInfo.d",
+        "submodules/agora/source/agora/consensus/UTXOSet.d",
+        "submodules/agora/source/agora/utils/Log.d",
+        "submodules/agora/source/agora/utils/Test.d",
+        "submodules/agora/source/agora/utils/Utility.d",
+        "submodules/agora/source/agora/utils/WellKnownKeys.d"
+    ],
+
+    "dependencies": {
+	    "agora" : { "path": "submodules/agora/", "version": "*" },
+	    "ocean" : { "path": "submodules/ocean/", "version": "*" },
+	    "vibe-d": "~>0.9.2"
+    },
+    "subConfigurations": {
+        "agora": "libconsensus"
+    }
+}
