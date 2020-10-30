@@ -1,0 +1,21 @@
+# Runs the faucet
+
+[Unit]
+Description=Your friendly transaction-happy bot
+AssertPathExists=/srv/faucet/
+Requires=network-online.target local-fs.target
+After=network-online.target local-fs.target
+# Allow 5 restart / 120 seconds before marking this as failed
+StartLimitBurst=5
+StartLimitIntervalSec=120
+
+[Service]
+Type=simple
+WorkingDirectory=/srv/faucet/
+ExecStart=/usr/bin/docker run --rm -v /srv/faucet/:/faucet/wd/ -t bpfk/faucet http://eu-002.bosagora.io:2826
+# Reload is not implemented
+#ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+
+[Install]
+WantedBy= multi-user.target
