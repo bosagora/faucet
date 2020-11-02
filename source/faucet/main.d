@@ -50,7 +50,7 @@ private struct State
     private Height known;
 
     /// Update the UTXO set and the `known` height
-    private bool update (API client, Height from)
+    private bool update (API client, Height from) @safe
     {
         const height = client.getBlockHeight();
         if (from >= height + 1)
@@ -78,6 +78,44 @@ private struct State
     }
 }
 
+/// Helper function to map an `Output` to a `TxBuilder`
+private TxBuilder buildTx (in Output value, in Hash key)
+    @safe pure nothrow
+{
+    return TxBuilder(value.address).attach(value, key);
+}
+
+/*******************************************************************************
+
+    Splits the Outputs from `utxo_rng` towards `count` random keys
+
+    The keys are continuous in the `WK.Keys.byRange()` range, but the range
+    starts at a random position (no less than `count` before the end).
+
+    Params:
+      UR = Range of UTXO and hash tuple with properties
+           `key` (hash) and `value` (`Output`)
+      count = The number of keys to spread the UTXOs to
+
+    Returns:
+      A range of Transactions
+
+*******************************************************************************/
+
+private auto splitTx (UR) (UR utxo_rng, uint count)
+{
+    static assert (isInputRange!UR);
+
+    return utxo_rng.map!(tup => buildTx(tup.value.output, tup.key))
+        .map!(txb => txb.split(
+                  WK.Keys.byRange()
+                  .drop(uniform(0, 1378 - count, rndGen))
+                  .take(count)
+                  .map!(k => k.address))
+              .sign()
+            );
+}
+
 /*******************************************************************************
 
     Perform state setup and make sure there is enough UTXOs for us to use
@@ -91,12 +129,9 @@ private struct State
       client = An API instance to connect to a node
       count = The number of keys to spread the transactions to
 
-    Returns:
-      The generated transactions
-
 *******************************************************************************/
 
-public Transaction[] setup (ref State state, API client, uint count)
+public void setup (ref State state, API client, uint count)
 {
     state.update(client, Height(0));
     const utxo_len = state.utxos.storage.length;
@@ -108,47 +143,42 @@ public Transaction[] setup (ref State state, API client, uint count)
         foreach (key, utxo; state.utxos)
             logInfo("UTXO: [%s] %s", key, utxo);
 
-    auto last_block = client.getBlocksFrom(state.known, 1);
-    assert(last_block.length == 1 && last_block[0].header.height == state.known);
-
-    auto txs = last_block[0].spendable().map!(txb => txb.split(
-                    WK.Keys.byRange().drop(uniform(0, WKKeysCount - count, rndGen))
-                    .take(count).map!(k => k.address)).sign()).array();
-
-    return txs;
+    if (utxo_len < 200)
+    {
+        assert(utxo_len >= 8);
+        state.utxos.storage.byKeyValue().take(8).splitTx(25)
+            .each!(tx => client.putTransaction(tx));
+    }
 }
 
 /*******************************************************************************
 
     A task called periodically that generates and send transactions to a node
 
-    This function first sends the previously generated set of transactions,
-    using `initial_txs` on its first run, then generate a new set based on
-    what it just sent, and will send them on the next run.
+    This function will wait for block 1 to be externalized before doing anything
+    (block 1 should be triggered by `setup`).
+    Each time this runs, it creates 16 transactions which split an UTXO among
+    15 random keys.
 
     Params:
       client = An API instance to connect to a node
-      utxo = The current UTXO set
-      initial_txs = The initial set of transactions to send on the first run
+      state =  The current state of Faucet
 
 *******************************************************************************/
 
-void send (API client, TestUTXOSet utxo, Transaction[] initial_txs) @safe
+void send (API client, ref State state) @safe
 {
-    static Transaction[] txs;
-    if (!txs.length)
-        txs = initial_txs;
+    state.update(client, Height(state.known + 1));
+    if (state.known < 1)
+        return logInfo("Waiting for setup to be completed");
 
-    foreach (tx; txs)
+    logInfo("About to send transactions, UTXO set: %d entries", state.utxos.length);
+
+    foreach (tx; state.utxos.byKeyValue().take(16).splitTx(count))
     {
         client.putTransaction(tx);
         logInfo("Transaction sent: %s", tx);
     }
-
-    txs = txs.map!(txb => TxBuilder(txb).split(
-             WK.Keys.byRange().drop(uniform(0, 1378 - count, rndGen))
-             .take(count).map!(k => k.address))
-             .sign()).array();
 }
 
 /// Application entry point
@@ -173,8 +203,8 @@ int main (string[] args)
         auto node = new RestInterfaceClient!API(args[1]);
         State state;
         state.utxos = new TestUTXOSet();
-        auto txs = state.setup(node, count);
-        setTimer(interval, () => send(node, state.utxos, txs), true);
+        state.setup(node, count);
+        setTimer(interval, () => send(node, state), true);
         return runEventLoop();
     }
     catch (Exception e)
