@@ -21,8 +21,8 @@ import agora.common.Serializer;
 import agora.common.Types;
 import agora.consensus.data.genesis.Test;
 import agora.consensus.data.Transaction;
-import agora.consensus.data.UTXOSetValue;
-import agora.consensus.UTXOSet;
+import agora.consensus.data.UTXO;
+import agora.consensus.state.UTXOSet;
 import agora.utils.Test;
 
 import std.algorithm;
