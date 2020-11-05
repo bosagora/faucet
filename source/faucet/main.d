@@ -16,6 +16,7 @@
 module faucet.main;
 
 import agora.api.FullNode;
+import agora.common.Amount;
 import agora.common.crypto.Key;
 import agora.common.Serializer;
 import agora.common.Types;
@@ -106,7 +107,9 @@ private auto splitTx (UR) (UR utxo_rng, uint count)
 {
     static assert (isInputRange!UR);
 
-    return utxo_rng.map!(tup => buildTx(tup.value.output, tup.key))
+    return utxo_rng
+        .filter!(tup => tup.value.output.value >= Amount(count))
+        .map!(tup => buildTx(tup.value.output, tup.key))
         .map!(txb => txb.split(
                   WK.Keys.byRange()
                   .drop(uniform(0, 1378 - count, rndGen))
