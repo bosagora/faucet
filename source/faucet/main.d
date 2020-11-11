@@ -107,7 +107,6 @@ private auto splitTx (UR) (UR utxo_rng, uint count)
     static assert (isInputRange!UR);
 
     return utxo_rng
-        .filter!(tup => tup.value.output.value >= Amount(count))
         .map!(tup => buildTx(tup.value.output, tup.key))
         .map!(txb => txb.split(
                   WK.Keys.byRange()
@@ -116,6 +115,30 @@ private auto splitTx (UR) (UR utxo_rng, uint count)
                   .map!(k => k.address))
               .sign()
             );
+}
+
+/*******************************************************************************
+
+    Merges the Outputs from `utxo_rng` into a range of transactions
+    with a single input and output.
+
+    Params:
+      UR = Range of tuple with an `Output` (`value`) and
+            a `Hash` (`key`), as its first and second element, respectively
+
+    Returns:
+      A range of Transactions
+
+*******************************************************************************/
+
+private auto mergeTx (UR) (UR utxo_rng) @safe
+{
+    static assert (isInputRange!UR);
+
+    return utxo_rng
+            .filter!(tup => tup.value.output.value > Amount(count))
+            .map!(tup => buildTx(tup.value.output, tup.key)
+            .sign());
 }
 
 /*******************************************************************************
@@ -176,10 +199,21 @@ void send (API client, ref State state) @safe
 
     logInfo("About to send transactions, UTXO set: %d entries", state.utxos.length);
 
-    foreach (tx; state.utxos.byKeyValue().take(16).splitTx(count))
+    if (state.utxos.storage.length > 200)
     {
-        client.putTransaction(tx);
-        logInfo("Transaction sent: %s", tx);
+        foreach (tx; state.utxos.byKeyValue().take(16).mergeTx())
+        {
+            client.putTransaction(tx);
+            logInfo("Transaction sent: %s", tx);
+        }
+    }
+    else
+    {
+        foreach (tx; state.utxos.byKeyValue().take(16).splitTx(count))
+        {
+            client.putTransaction(tx);
+            logInfo("Transaction sent: %s", tx);
+        }
     }
 }
 
