@@ -38,7 +38,7 @@ import vibe.web.rest;
 
 /// How frequently we run our periodic task
 immutable interval = 15.seconds;
-/// How many transactions we send per task run
+/// Between how many addresses we split a transaction by
 immutable count = 15;
 
 /// Holds the state of our application and contains update methods
@@ -93,8 +93,8 @@ private TxBuilder buildTx (in Output value, in Hash key)
     starts at a random position (no less than `count` before the end).
 
     Params:
-      UR = Range of UTXO and hash tuple with properties
-           `key` (hash) and `value` (`Output`)
+      UR = Range of tuple with an `Output` (`value`) and
+            a `Hash` (`key`), as its first and second element, respectively
       count = The number of keys to spread the UTXOs to
 
     Returns:
@@ -123,7 +123,7 @@ private auto splitTx (UR) (UR utxo_rng, uint count)
     Perform state setup and make sure there is enough UTXOs for us to use
 
     Populate the `state` variable with the current state of node using `client`,
-    and create transactions the will spread all spendable transactions from
+    and create transactions that will spread all spendable transactions from
     the last known block to `count` addresses.
 
     Params:
