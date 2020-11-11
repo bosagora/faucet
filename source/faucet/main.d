@@ -22,7 +22,6 @@ import agora.common.Serializer;
 import agora.common.Types;
 import agora.consensus.data.genesis.Test;
 import agora.consensus.data.Transaction;
-import agora.consensus.data.UTXO;
 import agora.consensus.state.UTXOSet;
 import agora.utils.Test;
 
