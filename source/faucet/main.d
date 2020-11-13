@@ -38,7 +38,7 @@ import vibe.web.rest;
 
 /// How frequently we run our periodic task
 immutable interval = 15.seconds;
-/// How many transactions we send per task run
+/// Between how many addresses we split a transaction by
 immutable count = 15;
 
 /// Holds the state of our application and contains update methods
@@ -93,8 +93,8 @@ private TxBuilder buildTx (in Output value, in Hash key)
     starts at a random position (no less than `count` before the end).
 
     Params:
-      UR = Range of UTXO and hash tuple with properties
-           `key` (hash) and `value` (`Output`)
+      UR = Range of tuple with an `Output` (`value`) and
+            a `Hash` (`key`), as its first and second element, respectively
       count = The number of keys to spread the UTXOs to
 
     Returns:
@@ -107,7 +107,6 @@ private auto splitTx (UR) (UR utxo_rng, uint count)
     static assert (isInputRange!UR);
 
     return utxo_rng
-        .filter!(tup => tup.value.output.value >= Amount(count))
         .map!(tup => buildTx(tup.value.output, tup.key))
         .map!(txb => txb.split(
                   WK.Keys.byRange()
@@ -120,10 +119,34 @@ private auto splitTx (UR) (UR utxo_rng, uint count)
 
 /*******************************************************************************
 
+    Merges the Outputs from `utxo_rng` into a range of transactions
+    with a single input and output.
+
+    Params:
+      UR = Range of tuple with an `Output` (`value`) and
+            a `Hash` (`key`), as its first and second element, respectively
+
+    Returns:
+      A range of Transactions
+
+*******************************************************************************/
+
+private auto mergeTx (UR) (UR utxo_rng) @safe
+{
+    static assert (isInputRange!UR);
+
+    return utxo_rng
+            .filter!(tup => tup.value.output.value > Amount(count))
+            .map!(tup => buildTx(tup.value.output, tup.key)
+            .sign());
+}
+
+/*******************************************************************************
+
     Perform state setup and make sure there is enough UTXOs for us to use
 
     Populate the `state` variable with the current state of node using `client`,
-    and create transactions the will spread all spendable transactions from
+    and create transactions that will spread all spendable transactions from
     the last known block to `count` addresses.
 
     Params:
@@ -176,10 +199,21 @@ void send (API client, ref State state) @safe
 
     logInfo("About to send transactions, UTXO set: %d entries", state.utxos.length);
 
-    foreach (tx; state.utxos.byKeyValue().take(16).splitTx(count))
+    if (state.utxos.storage.length > 200)
     {
-        client.putTransaction(tx);
-        logInfo("Transaction sent: %s", tx);
+        foreach (tx; state.utxos.byKeyValue().take(16).mergeTx())
+        {
+            client.putTransaction(tx);
+            logInfo("Transaction sent: %s", tx);
+        }
+    }
+    else
+    {
+        foreach (tx; state.utxos.byKeyValue().take(16).splitTx(count))
+        {
+            client.putTransaction(tx);
+            logInfo("Transaction sent: %s", tx);
+        }
     }
 }
 
