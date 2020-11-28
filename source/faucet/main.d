@@ -214,7 +214,7 @@ void send (API client, ref State state)
         foreach (tx; state.utxos.byKeyValue().take(16).mergeTx())
         {
             client.putTransaction(tx);
-            logInfo("Transaction sent: %s", tx);
+            logDebug("Transaction sent: %s", tx);
         }
     }
     else
@@ -222,7 +222,7 @@ void send (API client, ref State state)
         foreach (tx; state.utxos.byKeyValue().take(16).splitTx(Config.count))
         {
             client.putTransaction(tx);
-            logInfo("Transaction sent: %s", tx);
+            logDebug("Transaction sent: %s", tx);
         }
     }
 }
