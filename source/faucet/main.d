@@ -36,10 +36,16 @@ import vibe.core.core;
 import vibe.core.log;
 import vibe.web.rest;
 
-/// How frequently we run our periodic task
-immutable interval = 15.seconds;
-/// Between how many addresses we split a transaction by
-immutable count = 15;
+
+/// Configuration parameter for Faucet
+private struct Config
+{
+    /// How frequently we run our periodic task
+    static immutable interval = 15.seconds;
+
+    /// Between how many addresses we split a transaction by
+    static immutable count = 15;
+}
 
 /// Holds the state of our application and contains update methods
 private struct State
@@ -129,7 +135,7 @@ private auto mergeTx (UR) (UR utxo_rng) @safe
     static assert (isInputRange!UR);
 
     return utxo_rng
-            .filter!(tup => tup.value.output.value > Amount(count))
+            .filter!(tup => tup.value.output.value > Amount(Config.count))
             .map!(tup => TxBuilder(tup.value.output, tup.key)
             .sign());
 }
@@ -202,7 +208,7 @@ void send (API client, ref State state) @safe
     }
     else
     {
-        foreach (tx; state.utxos.byKeyValue().take(16).splitTx(count))
+        foreach (tx; state.utxos.byKeyValue().take(16).splitTx(Config.count))
         {
             client.putTransaction(tx);
             logInfo("Transaction sent: %s", tx);
@@ -232,8 +238,8 @@ int main (string[] args)
         auto node = new RestInterfaceClient!API(args[1]);
         State state;
         state.utxos = new TestUTXOSet();
-        state.setup(node, count);
-        setTimer(interval, () => send(node, state), true);
+        state.setup(node, Config.count);
+        setTimer(Config.interval, () => send(node, state), true);
         return runEventLoop();
     }
     catch (Exception e)
