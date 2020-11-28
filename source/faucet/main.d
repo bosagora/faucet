@@ -78,13 +78,6 @@ private struct State
     }
 }
 
-/// Helper function to map an `Output` to a `TxBuilder`
-private TxBuilder buildTx (in Output value, in Hash key)
-    @safe pure nothrow
-{
-    return TxBuilder(value.address).attach(value, key);
-}
-
 /*******************************************************************************
 
     Splits the Outputs from `utxo_rng` towards `count` random keys
@@ -107,7 +100,7 @@ private auto splitTx (UR) (UR utxo_rng, uint count)
     static assert (isInputRange!UR);
 
     return utxo_rng
-        .map!(tup => buildTx(tup.value.output, tup.key))
+        .map!(tup => TxBuilder(tup.value.output, tup.key))
         .map!(txb => txb.split(
                   WK.Keys.byRange()
                   .drop(uniform(0, 1378 - count, rndGen))
@@ -137,7 +130,7 @@ private auto mergeTx (UR) (UR utxo_rng) @safe
 
     return utxo_rng
             .filter!(tup => tup.value.output.value > Amount(count))
-            .map!(tup => buildTx(tup.value.output, tup.key)
+            .map!(tup => TxBuilder(tup.value.output, tup.key)
             .sign());
 }
 
