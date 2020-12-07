@@ -41,7 +41,7 @@ import vibe.web.rest;
 private struct Config
 {
     /// How frequently we run our periodic task
-    static immutable interval = 15.seconds;
+    static immutable interval = 30.seconds;
 
     /// Between how many addresses we split a transaction by
     static immutable count = 15;
