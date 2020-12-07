@@ -106,6 +106,7 @@ private auto splitTx (UR) (UR utxo_rng, uint count)
     static assert (isInputRange!UR);
 
     return utxo_rng
+        .filter!(tup => tup.value.output.value >= Amount(count))
         .map!(tup => TxBuilder(tup.value.output, tup.key))
         .map!(txb => txb.split(
                   WK.Keys.byRange()
@@ -130,14 +131,14 @@ private auto splitTx (UR) (UR utxo_rng, uint count)
 
 *******************************************************************************/
 
-private auto mergeTx (UR) (UR utxo_rng) @safe
+private Transaction mergeTx (UR) (UR utxo_rng) @safe
 {
     static assert (isInputRange!UR);
 
-    return utxo_rng
-            .filter!(tup => tup.value.output.value > Amount(Config.count))
-            .map!(tup => TxBuilder(tup.value.output, tup.key)
-            .sign());
+    return TxBuilder(WK.Keys[uniform(0, 1378, rndGen)].address)
+                        .attach(utxo_rng.map!(utxo => utxo.value.output)
+                        .zip(utxo_rng.map!(utxo => utxo.key)))
+                        .sign();
 }
 
 /*******************************************************************************
@@ -211,11 +212,9 @@ void send (API client, ref State state)
 
     if (state.utxos.storage.length > 200)
     {
-        foreach (tx; state.utxos.byKeyValue().take(16).mergeTx())
-        {
-            client.putTransaction(tx);
-            logDebug("Transaction sent: %s", tx);
-        }
+        auto tx = state.utxos.byKeyValue().take(16).mergeTx();
+        client.putTransaction(tx);
+        logDebug("Transaction sent: %s", tx);
     }
     else
     {
