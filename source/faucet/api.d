@@ -33,4 +33,18 @@ import vibe.http.common;
 @path("/")
 public interface IFaucet
 {
+// The REST generator requires @safe methods
+@safe:
+
+    /***************************************************************************
+
+        Returns:
+          An array of all UTXOs known
+
+        API:
+          GET /utxos
+
+    ***************************************************************************/
+
+    public UTXO[Hash] getUTXOs ();
 }

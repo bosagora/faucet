@@ -260,6 +260,12 @@ public class Faucet : IFaucet
             }
         }
     }
+
+    /// GET: /utxos
+    public override UTXO[Hash] getUTXOs () pure nothrow @safe
+    {
+        return this.state.utxos.storage;
+    }
 }
 
 /// Application entry point
