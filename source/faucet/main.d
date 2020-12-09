@@ -15,6 +15,8 @@
 
 module faucet.main;
 
+import faucet.api;
+
 import agora.api.FullNode;
 import agora.common.Amount;
 import agora.common.crypto.Key;
@@ -86,142 +88,176 @@ private struct State
 
 /*******************************************************************************
 
-    Splits the Outputs from `utxo_rng` towards `count` random keys
+    Implementation of the faucet API
 
-    The keys are continuous in the `WK.Keys.byRange()` range, but the range
-    starts at a random position (no less than `count` before the end).
-
-    Params:
-      UR = Range of tuple with an `Output` (`value`) and
-            a `Hash` (`key`), as its first and second element, respectively
-      count = The number of keys to spread the UTXOs to
-
-    Returns:
-      A range of Transactions
+    This class implements the business code of the faucet.
 
 *******************************************************************************/
 
-private auto splitTx (UR) (UR utxo_rng, uint count)
+public class Faucet : IFaucet
 {
-    static assert (isInputRange!UR);
+    /// Config instance
+    private Config config;
 
-    return utxo_rng
-        .filter!(tup => tup.value.output.value >= Amount(count))
-        .map!(tup => TxBuilder(tup.value.output, tup.key))
-        .map!(txb => txb.split(
-                  WK.Keys.byRange()
-                  .drop(uniform(0, 1378 - count, rndGen))
-                  .take(count)
-                  .map!(k => k.address))
-              .sign()
-            );
-}
+    /// The state instance represents the current state of the application.
+    /// It is updated in the initial setup, and before a set of transactions
+    /// is sent. The update function takes the known height as a parameter,
+    /// and determines how many blocks it needs to catch up with. The UTXO set
+    /// for a certain height represents the state at that height. Therefore,
+    /// `updateUTXOCache` is called for every block until the latest block.
+    private State state = State.init;
 
-/*******************************************************************************
+    /***************************************************************************
 
-    Merges the Outputs from `utxo_rng` into a range of transactions
-    with a single input and output.
+        Constructor
 
-    Params:
-      UR = Range of tuple with an `Output` (`value`) and
-            a `Hash` (`key`), as its first and second element, respectively
+        Params:
+          config = Config instance
 
-    Returns:
-      A range of Transactions
+    ***************************************************************************/
 
-*******************************************************************************/
-
-private Transaction mergeTx (UR) (UR utxo_rng) @safe
-{
-    static assert (isInputRange!UR);
-
-    return TxBuilder(WK.Keys[uniform(0, 1378, rndGen)].address)
-                        .attach(utxo_rng.map!(utxo => utxo.value.output)
-                        .zip(utxo_rng.map!(utxo => utxo.key)))
-                        .sign();
-}
-
-/*******************************************************************************
-
-    Perform state setup and make sure there is enough UTXOs for us to use
-
-    Populate the `state` variable with the current state of node using `client`,
-    and create transactions that will spread all spendable transactions from
-    the last known block to `count` addresses.
-
-    Params:
-      state = The application state
-      client = An API instance to connect to a node
-      count = The number of keys to spread the transactions to
-
-*******************************************************************************/
-
-public void setup (ref State state, API client, uint count)
-{
-    state.update(client, Height(0));
-    const utxo_len = state.utxos.storage.length;
-    immutable size_t WKKeysCount = 1378;
-
-    logInfo("Setting up: height=%s, %s UTXOs found", state.known, utxo_len);
-    if (utxo_len < 200)
+    public this (const Config config)
     {
-        assert(utxo_len >= 8);
-        state.utxos.storage.byKeyValue().take(8).splitTx(25)
-            .each!(tx => client.putTransaction(tx));
+        this.config = config;
     }
-}
 
-/*******************************************************************************
+    /*******************************************************************************
 
-    A task called periodically that generates and send transactions to a node
+        Splits the Outputs from `utxo_rng` towards `count` random keys
 
-    This function will wait for block 1 to be externalized before doing anything
-    (block 1 should be triggered by `setup`).
-    Each time this runs, it creates 16 transactions which split an UTXO among
-    15 random keys.
+        The keys are continuous in the `WK.Keys.byRange()` range, but the range
+        starts at a random position (no less than `count` before the end).
 
-    Params:
-      client = An API instance to connect to a node
-      state =  The current state of Faucet
+        Params:
+          UR = Range of tuple with an `Output` (`value`) and
+                 a `Hash` (`key`), as its first and second element, respectively
+          count = The number of keys to spread the UTXOs to
 
-*******************************************************************************/
+        Returns:
+          A range of Transactions
 
-void send (API client, ref State state)
-{
-    state.update(client, Height(state.known + 1));
-    if (state.known < 1)
-        return logInfo("Waiting for setup to be completed");
+    *******************************************************************************/
 
-    logInfo("About to send transactions...");
-
-    // Sort them so we don't iterate multiple time
-    // Note: This may cause a lot of memory usage, might need restructuing later
-    // Mutable because of https://issues.dlang.org/show_bug.cgi?id=9792
-    auto sutxo = state.utxos.values.sort!((a, b) => a.output.value < b.output.value);
-    const size = sutxo.length();
-    logInfo("\tUTXO set: %d entries", size);
-
-    immutable median = sutxo[size / 2].output.value;
-    // Should be 500M (5,000,000,000,000,000) for the time being
-    immutable sum = sutxo.map!(utxo => utxo.output.value)
-        .fold!((a, b) => Amount(a).mustAdd(b))(Amount(0));
-    auto mean = Amount(sum); mean.div(size);
-
-    logInfo("\tMedian: %s, Avg: %s", median, mean);
-    logInfo("\tL: %s, H: %s", sutxo[0].output.value, sutxo[$-1].output.value);
-
-    if (state.utxos.storage.length > 200)
+    private auto splitTx (UR) (UR utxo_rng, uint count)
     {
-        auto tx = state.utxos.byKeyValue().take(16).mergeTx();
-        client.putTransaction(tx);
-        logDebug("Transaction sent: %s", tx);
+        static assert (isInputRange!UR);
+
+        return utxo_rng
+            .filter!(tup => tup.value.output.value >= Amount(count))
+            .map!(tup => TxBuilder(tup.value.output, tup.key))
+            .map!(txb => txb.split(
+                    WK.Keys.byRange()
+                    .drop(uniform(0, 1378 - count, rndGen))
+                    .take(count)
+                    .map!(k => k.address))
+                .sign());
     }
-    else
+
+    /*******************************************************************************
+
+        Merges the Outputs from `utxo_rng` into a range of transactions
+        with a single input and output.
+
+        Params:
+          UR = Range of tuple with an `Output` (`value`) and
+          a `Hash` (`key`), as its first and second element, respectively
+
+        Returns:
+          A range of Transactions
+
+    *******************************************************************************/
+
+    private Transaction mergeTx (UR) (UR utxo_rng) @safe
     {
-        foreach (tx; state.utxos.byKeyValue().take(16).splitTx(Config.count))
+        static assert (isInputRange!UR);
+
+        return TxBuilder(WK.Keys[uniform(0, 1378, rndGen)].address)
+                            .attach(utxo_rng.map!(utxo => utxo.value.output)
+                            .zip(utxo_rng.map!(utxo => utxo.key)))
+                            .sign();
+    }
+
+    /*******************************************************************************
+
+        Perform state setup and make sure there is enough UTXOs for us to use
+
+        Populate the `state` variable with the current state of node using `client`,
+        and create transactions that will spread all spendable transactions from
+        the last known block to `count` addresses.
+
+        Params:
+          client = An API instance to connect to a node
+          count = The number of keys to spread the transactions to
+
+    *******************************************************************************/
+
+    public void setup (API client, uint count)
+    {
+        this.state.update(client, Height(0));
+        const utxo_len = this.state.utxos.storage.length;
+        immutable size_t WKKeysCount = 1378;
+
+        logInfo("Setting up: height=%s, %s UTXOs found", this.state.known, utxo_len);
+        if (utxo_len < 200)
         {
+            assert(utxo_len >= 8);
+            this.splitTx(this.state.utxos.storage.byKeyValue().take(8), 25)
+                .each!(tx => client.putTransaction(tx));
+        }
+    }
+
+    /*******************************************************************************
+
+        A task called periodically that generates and send transactions to a node
+
+        This function will wait for block 1 to be externalized before doing anything
+        (block 1 should be triggered by `setup`).
+        Each time this runs, it creates 16 transactions which split an UTXO among
+        15 random keys.
+
+        Params:
+          client = An API instance to connect to a node
+
+    *******************************************************************************/
+
+    void send (API client)
+    {
+        this.state.update(client, Height(this.state.known + 1));
+        if (this.state.known < 1)
+            return logInfo("Waiting for setup to be completed");
+
+        logInfo("About to send transactions...");
+
+        // Sort them so we don't iterate multiple time
+        // Note: This may cause a lot of memory usage, might need restructuing later
+        // Mutable because of https://issues.dlang.org/show_bug.cgi?id=9792
+        auto sutxo = this.state.utxos.values.sort!((a, b) => a.output.value < b.output.value);
+        const size = sutxo.length();
+        logInfo("\tUTXO set: %d entries", size);
+
+        immutable median = sutxo[size / 2].output.value;
+        // Should be 500M (5,000,000,000,000,000) for the time being
+        immutable sum = sutxo.map!(utxo => utxo.output.value)
+            .fold!((a, b) => Amount(a).mustAdd(b))(Amount(0));
+        auto mean = Amount(sum); mean.div(size);
+
+        logInfo("\tMedian: %s, Avg: %s", median, mean);
+        logInfo("\tL: %s, H: %s", sutxo[0].output.value, sutxo[$-1].output.value);
+
+        if (this.state.utxos.storage.length > 200)
+        {
+            auto tx = this.mergeTx(this.state.utxos.byKeyValue().take(16));
             client.putTransaction(tx);
             logDebug("Transaction sent: %s", tx);
+        }
+        else
+        {
+            foreach (tx; this.splitTx(this.state.utxos.byKeyValue().take(16),
+                                      this.config.count))
+            {
+                client.putTransaction(tx);
+                logDebug("Transaction sent: %s", tx);
+            }
         }
     }
 }
@@ -246,10 +282,10 @@ int main (string[] args)
     {
         logInfo("The address of node is %s", args[1]);
         auto node = new RestInterfaceClient!API(args[1]);
-        State state;
-        state.utxos = new TestUTXOSet();
-        state.setup(node, Config.count);
-        setTimer(Config.interval, () => send(node, state), true);
+        auto faucet = new Faucet(Config.init);
+        faucet.state.utxos = new TestUTXOSet();
+        faucet.setup(node, faucet.config.count);
+        setTimer(faucet.config.interval, () => faucet.send(node), true);
         return runEventLoop();
     }
     catch (Exception e)
