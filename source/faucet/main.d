@@ -107,18 +107,24 @@ public class Faucet : IFaucet
     /// `updateUTXOCache` is called for every block until the latest block.
     private State state = State.init;
 
+    /// A client object implementing `API`
+    private API client;
+
     /***************************************************************************
 
         Constructor
 
         Params:
           config = Config instance
+          address = The address (IPv4, IPv6, hostname) of the node
 
     ***************************************************************************/
 
-    public this (const Config config)
+    public this (const Config config, const Address address)
     {
         this.config = config;
+        this.client = new RestInterfaceClient!API(address);
+        this.state.utxos = new TestUTXOSet();
     }
 
     /*******************************************************************************
@@ -191,9 +197,9 @@ public class Faucet : IFaucet
 
     *******************************************************************************/
 
-    public void setup (API client, uint count)
+    public void setup (uint count)
     {
-        this.state.update(client, Height(0));
+        this.state.update(this.client, Height(0));
         const utxo_len = this.state.utxos.storage.length;
         immutable size_t WKKeysCount = 1378;
 
@@ -202,7 +208,7 @@ public class Faucet : IFaucet
         {
             assert(utxo_len >= 8);
             this.splitTx(this.state.utxos.storage.byKeyValue().take(8), 25)
-                .each!(tx => client.putTransaction(tx));
+                .each!(tx => this.client.putTransaction(tx));
         }
     }
 
@@ -220,9 +226,9 @@ public class Faucet : IFaucet
 
     *******************************************************************************/
 
-    void send (API client)
+    void send ()
     {
-        this.state.update(client, Height(this.state.known + 1));
+        this.state.update(this.client, Height(this.state.known + 1));
         if (this.state.known < 1)
             return logInfo("Waiting for setup to be completed");
 
@@ -247,7 +253,7 @@ public class Faucet : IFaucet
         if (this.state.utxos.storage.length > 200)
         {
             auto tx = this.mergeTx(this.state.utxos.byKeyValue().take(16));
-            client.putTransaction(tx);
+            this.client.putTransaction(tx);
             logDebug("Transaction sent: %s", tx);
         }
         else
@@ -255,7 +261,7 @@ public class Faucet : IFaucet
             foreach (tx; this.splitTx(this.state.utxos.byKeyValue().take(16),
                                       this.config.count))
             {
-                client.putTransaction(tx);
+                this.client.putTransaction(tx);
                 logDebug("Transaction sent: %s", tx);
             }
         }
@@ -287,11 +293,9 @@ int main (string[] args)
     try
     {
         logInfo("The address of node is %s", args[1]);
-        auto node = new RestInterfaceClient!API(args[1]);
-        auto faucet = new Faucet(Config.init);
-        faucet.state.utxos = new TestUTXOSet();
-        faucet.setup(node, faucet.config.count);
-        setTimer(faucet.config.interval, () => faucet.send(node), true);
+        auto faucet = new Faucet(Config.init, args[1]);
+        faucet.setup(faucet.config.count);
+        setTimer(faucet.config.interval, () => faucet.send(), true);
         return runEventLoop();
     }
     catch (Exception e)
