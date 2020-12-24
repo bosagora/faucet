@@ -54,8 +54,20 @@ private struct State
 {
     /// The UTXO set at `this.known`
     private TestUTXOSet utxos;
+    /// UTXOs owned by us
+    private UTXO[Hash] owned_utxos;
     /// The most up-to-date block we know about
     private Height known;
+
+    /// Get UTXOs owned by us
+    private UTXO[Hash] getOwnedUTXOs () nothrow @safe
+    {
+        return this.utxos.storage.byKeyValue()
+                   .filter!(
+                       kv => kv.value.output.address == WK.Keys[kv.value.output.address].address)
+                   .map!(kv => tuple(kv.key, kv.value))
+                   .assocArray();
+    }
 
     /// Update the UTXO set and the `known` height
     private bool update (API client, Height from) @safe
@@ -76,6 +88,9 @@ private struct State
             foreach (ref tx; b.txs)
                 if (tx.type == TxType.Payment)
                     this.utxos.updateUTXOCache(tx, b.header.height);
+
+        assert(this.getOwnedUTXOs().length);
+        this.owned_utxos = this.getOwnedUTXOs();
 
         // Use signed arithmetic to avoid negative values wrapping around
         const long delta = (cast(long) this.utxos.storage.length) - current_len;
