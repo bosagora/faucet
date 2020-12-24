@@ -13,6 +13,8 @@
 
 module faucet.api;
 
+import agora.common.Amount;
+import agora.common.crypto.Key;
 import agora.common.Hash;
 import agora.consensus.state.UTXOSet;
 
@@ -47,4 +49,19 @@ public interface IFaucet
     ***************************************************************************/
 
     public UTXO[Hash] getUTXOs ();
+
+    /***************************************************************************
+
+        Send `amount` BOA to `KEY`, using owned UTXOs
+
+        API:
+          POST /send_transaction
+
+        Params:
+          recv = the destination key
+          amount = amount of BOA
+
+    ***************************************************************************/
+
+    public void sendTransaction (string recv, ulong amount);
 }
