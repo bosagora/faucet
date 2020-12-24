@@ -31,6 +31,7 @@ import std.algorithm;
 import std.random;
 import std.range;
 import std.stdio;
+import std.typecons;
 
 import core.time;
 
@@ -121,6 +122,9 @@ public class Faucet : IFaucet
     /// for a certain height represents the state at that height. Therefore,
     /// `updateUTXOCache` is called for every block until the latest block.
     private State state = State.init;
+
+    /// A storage to keep track of used UTXOs
+    private UTXO[Hash] used_utxos;
 
     /// A client object implementing `API`
     private API client;
@@ -286,6 +290,58 @@ public class Faucet : IFaucet
     public override UTXO[Hash] getUTXOs () pure nothrow @safe
     {
         return this.state.utxos.storage;
+    }
+
+    /// POST: /send_transaction
+    public override void sendTransaction (string recv, ulong amount)
+    {
+        PublicKey pubkey = PublicKey.fromString(recv);
+        Amount leftover = Amount(amount);
+        auto owned_utxo_rng = this.state.owned_utxos.byKeyValue()
+            // do not pick already used UTXOs
+            .filter!(pair => pair.key !in this.used_utxos);
+        auto first_utxo = owned_utxo_rng.front;
+        // add used UTXO to to used_utxos
+        this.used_utxos[first_utxo.key] = first_utxo.value;
+        owned_utxo_rng.popFront();
+        assert(first_utxo.value.output.value > Amount(0));
+
+        TxBuilder txb = TxBuilder(first_utxo.value.output, first_utxo.key);
+
+        if (leftover <= first_utxo.value.output.value)
+        {
+            Transaction tx = txb.draw(leftover, [pubkey]).sign();
+            logInfo("Sending %s BOA to %s", amount, recv);
+            this.client.putTransaction(tx);
+        }
+        else
+        {
+            txb.draw(first_utxo.value.output.value, [pubkey]);
+            leftover.sub(first_utxo.value.output.value);
+
+            while (leftover > Amount(0))
+            {
+                auto new_utxo = owned_utxo_rng.front;
+                this.used_utxos[new_utxo.key] = new_utxo.value;
+                owned_utxo_rng.popFront();
+                assert(new_utxo.value.output.value > Amount(0));
+
+                if (leftover <= new_utxo.value.output.value)
+                {
+                    txb.attach(new_utxo.value.output, new_utxo.key)
+                       .draw(leftover, [pubkey]);
+                    break;
+                }
+
+                txb.attach(new_utxo.value.output, new_utxo.key)
+                   .draw(new_utxo.value.output.value, [pubkey]);
+                leftover.sub(new_utxo.value.output.value);
+            }
+
+            Transaction tx = txb.sign();
+            logInfo("Sending %s BOA to %s", amount, recv);
+            this.client.putTransaction(tx);
+        }
     }
 }
 
