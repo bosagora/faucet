@@ -36,9 +36,9 @@
     ],
 
     "dependencies": {
-	    "agora" : { "path": "submodules/agora/", "version": "*" },
-	    "ocean" : { "path": "submodules/ocean/", "version": "*" },
-	    "vibe-d": "~>0.9.3-rc.1"
+        "agora" : { "version": "*" },
+        "ocean" : { "version": "*" },
+        "vibe-d": { "version": "*" }
     },
     "subConfigurations": {
         "agora": "libconsensus"
