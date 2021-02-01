@@ -88,7 +88,7 @@ private struct State
         foreach (ref b; blocks)
             foreach (ref tx; b.txs)
                 if (tx.type == TxType.Payment)
-                    this.utxos.updateUTXOCache(tx, b.header.height);
+                    this.utxos.updateUTXOCache(tx, b.header.height, PublicKey.init);
 
         assert(this.getOwnedUTXOs().length);
         this.owned_utxos = this.getOwnedUTXOs();
