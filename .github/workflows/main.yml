@@ -26,6 +26,6 @@ jobs:
         sudo apt-get install libsodium-dev
 
     - name: Test compilation
-       env:
-         - AGORA_VERSION: HEAD
-       run: dub build
+      env:
+        - AGORA_VERSION: HEAD
+      run: dub build
