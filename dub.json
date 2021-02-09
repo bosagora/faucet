@@ -16,7 +16,6 @@
         "submodules/agora/source/agora/common/crypto/ECC.d",
         "submodules/agora/source/agora/common/crypto/Key.d",
         "submodules/agora/source/agora/common/crypto/Schnorr.d",
-        "submodules/agora/source/agora/common/Hash.d",
         "submodules/agora/source/agora/common/Serializer.d",
         "submodules/agora/source/agora/common/Set.d",
         "submodules/agora/source/agora/common/Types.d",
