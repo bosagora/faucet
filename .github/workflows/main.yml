@@ -27,5 +27,5 @@ jobs:
 
     - name: Test compilation
       env:
-        - AGORA_VERSION: HEAD
+        AGORA_VERSION: HEAD
       run: dub build
