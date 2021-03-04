@@ -25,3 +25,5 @@ docs/
 
 # Target path for dub
 bin/
+
+.vscode/
