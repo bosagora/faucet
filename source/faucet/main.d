@@ -15,7 +15,7 @@
 
 module faucet.main;
 
-import faucet.api;
+import faucet.API;
 
 import agora.api.FullNode;
 import agora.common.Amount;
@@ -38,7 +38,6 @@ import core.time;
 import vibe.core.core;
 import vibe.core.log;
 import vibe.web.rest;
-
 
 /// Configuration parameter for Faucet
 private struct Config
@@ -120,7 +119,7 @@ private struct State
 
 *******************************************************************************/
 
-public class Faucet : IFaucet
+public class Faucet : FaucetAPI
 {
     /// Config instance
     private Config config;

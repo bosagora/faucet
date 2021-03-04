@@ -11,7 +11,7 @@
 
 *******************************************************************************/
 
-module faucet.api;
+module faucet.API;
 
 import agora.common.Amount;
 import agora.common.crypto.Key;
@@ -33,7 +33,7 @@ import vibe.http.common;
 *******************************************************************************/
 
 @path("/")
-public interface IFaucet
+public interface FaucetAPI
 {
 // The REST generator requires @safe methods
 @safe:
