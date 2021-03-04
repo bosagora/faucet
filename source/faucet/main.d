@@ -37,6 +37,8 @@ import core.time;
 
 import vibe.core.core;
 import vibe.core.log;
+import vibe.http.router;
+import vibe.http.server;
 import vibe.web.rest;
 
 /// Configuration parameter for Faucet
@@ -47,6 +49,12 @@ private struct Config
 
     /// Between how many addresses we split a transaction by
     static immutable count = 15;
+
+    /// Bind address
+    public string address = "0.0.0.0";
+
+    /// Bind port (default: 2766)
+    public ushort port = 0xACE;
 }
 
 /// Holds the state of our application and contains update methods
@@ -377,6 +385,15 @@ int main (string[] args)
     logInfo("The address of node is %s", args[1]);
     auto faucet = new Faucet(Config.init, args[1]);
     faucet.setup(faucet.config.count);
+
+    setLogLevel(LogLevel.info);
+    auto settings = new HTTPServerSettings(faucet.config.address);
+    settings.port = faucet.config.port;
+    auto router = new URLRouter();
+    router.registerRestInterface(faucet);
+    logInfo("About to listen to HTTP: %s", settings.port);
+    listenHTTP(settings, router);
+
     setTimer(faucet.config.interval, () => faucet.send(), true);
     return runEventLoop();
 }
