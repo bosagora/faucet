@@ -48,6 +48,7 @@ public interface IFaucet
 
     ***************************************************************************/
 
+    @path("/utxos")
     public UTXO[Hash] getUTXOs ();
 
     /***************************************************************************
@@ -55,7 +56,7 @@ public interface IFaucet
         Send `amount` BOA to `KEY`, using owned UTXOs
 
         API:
-          POST /send_transaction
+          POST /send
 
         Params:
           recv = the destination key
@@ -63,5 +64,6 @@ public interface IFaucet
 
     ***************************************************************************/
 
+    @path("/send")
     public void sendTransaction (string recv, ulong amount);
 }
