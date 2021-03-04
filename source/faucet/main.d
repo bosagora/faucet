@@ -73,32 +73,42 @@ private struct State
     /// Update the UTXO set and the `known` height
     private bool update (API client, Height from) @safe
     {
-        const height = client.getBlockHeight();
-        if (from >= height + 1)
+        try
         {
-            if (from > height + 1)
-                logError("Agora reported a Height of %s but we are at %s", height, this.known);
+            const height = client.getBlockHeight();
+            if (from >= height + 1)
+            {
+                if (from > height + 1)
+                    logError("Agora reported a Height of %s but we are at %s", height, this.known);
+                return false;
+            }
+
+            const blocks = client.getBlocksFrom(from, cast(uint) (height - from + 1));
+            logInfo("Updating state: blocks [%s .. %s] (%s)", from, height, blocks.length);
+            const current_len = this.utxos.storage.length;
+
+            foreach (ref b; blocks)
+                foreach (ref tx; b.txs)
+                    if (tx.type == TxType.Payment)
+                        this.utxos.updateUTXOCache(tx, b.header.height, PublicKey.init);
+
+            assert(this.getOwnedUTXOs().length);
+            this.owned_utxos = this.getOwnedUTXOs();
+
+            // Use signed arithmetic to avoid negative values wrapping around
+            const long delta = (cast(long) this.utxos.storage.length) - current_len;
+            logInfo("UTXO delta: %s", delta);
+            this.known = blocks[$ - 1].header.height;
+
+            return true;
+        }
+        // The exception that was thrown is likely from the network operation
+        // (`getBlockHeight` / `getBlocksFrom`), so just warn and retry later
+        catch (Exception e)
+        {
+            () @trusted { logWarn("Exception thrown while updating state: %s", e.msg); }();
             return false;
         }
-
-        const blocks = client.getBlocksFrom(from, cast(uint) (height - from + 1));
-        logInfo("Updating state: blocks [%s .. %s] (%s)", from, height, blocks.length);
-        const current_len = this.utxos.storage.length;
-
-        foreach (ref b; blocks)
-            foreach (ref tx; b.txs)
-                if (tx.type == TxType.Payment)
-                    this.utxos.updateUTXOCache(tx, b.header.height, PublicKey.init);
-
-        assert(this.getOwnedUTXOs().length);
-        this.owned_utxos = this.getOwnedUTXOs();
-
-        // Use signed arithmetic to avoid negative values wrapping around
-        const long delta = (cast(long) this.utxos.storage.length) - current_len;
-        logInfo("UTXO delta: %s", delta);
-        this.known = blocks[$ - 1].header.height;
-
-        return true;
     }
 }
 
@@ -218,7 +228,9 @@ public class Faucet : IFaucet
 
     public void setup (uint count)
     {
-        this.state.update(this.client, Height(0));
+        while (!this.state.update(this.client, Height(0)))
+            sleep(5.seconds);
+
         const utxo_len = this.state.utxos.storage.length;
         immutable size_t WKKeysCount = 1378;
 
@@ -247,7 +259,9 @@ public class Faucet : IFaucet
 
     void send ()
     {
-        this.state.update(this.client, Height(this.state.known + 1));
+        if (!this.state.update(this.client, Height(this.state.known + 1)))
+            return;
+
         if (this.state.known < 1)
             return logInfo("Waiting for setup to be completed");
 
@@ -361,18 +375,9 @@ int main (string[] args)
         return 1;
     }
 
-    try
-    {
-        logInfo("The address of node is %s", args[1]);
-        auto faucet = new Faucet(Config.init, args[1]);
-        faucet.setup(faucet.config.count);
-        setTimer(faucet.config.interval, () => faucet.send(), true);
-        return runEventLoop();
-    }
-    catch (Exception e)
-    {
-        logError("Exception while connecting: %s", e);
-        printHelp();
-        return 1;
-    }
+    logInfo("The address of node is %s", args[1]);
+    auto faucet = new Faucet(Config.init, args[1]);
+    faucet.setup(faucet.config.count);
+    setTimer(faucet.config.interval, () => faucet.send(), true);
+    return runEventLoop();
 }
