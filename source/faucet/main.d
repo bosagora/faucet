@@ -20,11 +20,11 @@ import faucet.API;
 import agora.api.FullNode;
 import agora.common.Amount;
 import agora.common.crypto.Key;
-import agora.common.Serializer;
 import agora.common.Types;
 import agora.consensus.data.genesis.Test;
 import agora.consensus.data.Transaction;
 import agora.consensus.state.UTXOSet;
+import agora.serialization.Serializer;
 import agora.utils.Test;
 
 import std.algorithm;
