@@ -14,9 +14,9 @@
 module faucet.API;
 
 import agora.common.Amount;
-import agora.common.crypto.Key;
 import agora.consensus.state.UTXOSet;
 import agora.crypto.Hash;
+import agora.crypto.Key;
 
 import vibe.web.rest;
 import vibe.http.common;
