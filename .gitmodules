@@ -1,12 +1,12 @@
 [submodule "agora"]
 	path = submodules/agora
-	url = https://github.com/bpfkorea/agora.git
+	url = https://github.com/bosagora/agora.git
 [submodule "barcode"]
 	path = submodules/barcode
 	url = https://github.com/deviator/barcode.git
 [submodule "base32"]
 	path = submodules/base32
-	url = https://github.com/bpfkorea/d-base32.git
+	url = https://github.com/bosagora/d-base32.git
 [submodule "bitblob"]
 	path = submodules/bitblob
 	url = https://github.com/Geod24/bitblob.git
@@ -21,7 +21,7 @@
 	url = https://github.com/dlang-community/D-YAML.git
 [submodule "eventcore"]
 	path = submodules/eventcore
-	url = https://github.com/bpfkorea/eventcore.git
+	url = https://github.com/bosagora/eventcore.git
 [submodule "libsodiumd"]
 	path = submodules/libsodiumd
 	url = https://github.com/Geod24/libsodiumd.git
@@ -33,7 +33,7 @@
 	url = https://github.com/libmir/mir-linux-kernel.git
 [submodule "ocean"]
 	path = submodules/ocean
-	url = https://github.com/bpfkorea/ocean.git
+	url = https://github.com/bosagora/ocean.git
 [submodule "openssl"]
 	path = submodules/openssl
 	url = https://github.com/D-Programming-Deimos/openssl.git
@@ -51,10 +51,10 @@
 	url = https://github.com/vibe-d/vibe-core.git
 [submodule "vibe-d"]
 	path = submodules/vibe.d
-	url = https://github.com/bpfkorea/vibe.d.git
+	url = https://github.com/bosagora/vibe.d.git
 [submodule "submodules/crypto"]
 	path = submodules/crypto
-	url = https://github.com/bpfkorea/crypto.git
+	url = https://github.com/bosagora/crypto.git
 [submodule "submodules/serialization"]
 	path = submodules/serialization
-	url = https://github.com/bpfkorea/serialization.git
+	url = https://github.com/bosagora/serialization.git
