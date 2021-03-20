@@ -23,6 +23,8 @@
         "submodules/agora/source/agora/consensus/data/Transaction.d",
         "submodules/agora/source/agora/consensus/data/UTXO.d",
         "submodules/agora/source/agora/consensus/data/PreImageInfo.d",
+        "submodules/agora/source/agora/consensus/state/UTXOCache.d",
+        "submodules/agora/source/agora/consensus/state/UTXODB.d",
         "submodules/agora/source/agora/consensus/state/UTXOSet.d",
         "submodules/agora/source/agora/crypto/Crc16.d",
         "submodules/agora/source/agora/crypto/Key.d",
