@@ -26,6 +26,7 @@
         "submodules/agora/source/agora/consensus/state/UTXOCache.d",
         "submodules/agora/source/agora/consensus/state/UTXODB.d",
         "submodules/agora/source/agora/consensus/state/UTXOSet.d",
+        "submodules/agora/source/agora/crypto/Bech32.d",
         "submodules/agora/source/agora/crypto/Crc16.d",
         "submodules/agora/source/agora/crypto/Key.d",
         "submodules/agora/source/agora/flash/API.d",
