@@ -51,6 +51,7 @@
         "submodules/agora/source/agora/utils/Backoff.d",
         "submodules/agora/source/agora/utils/Log.d",
         "submodules/agora/source/agora/utils/Test.d",
+        "submodules/agora/source/agora/utils/TxBuilder.d",
         "submodules/agora/source/agora/utils/Utility.d",
         "submodules/agora/source/agora/utils/WellKnownKeys.d"
     ],
