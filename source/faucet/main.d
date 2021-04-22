@@ -183,13 +183,16 @@ public class Faucet : FaucetAPI
     private auto splitTx (UR) (UR utxo_rng, uint count)
     {
         static assert (isInputRange!UR);
+        static immutable KeyCount = WK.Keys.byRange().length;
+
+        assert(count <= KeyCount);
 
         return utxo_rng
             .filter!(tup => tup.value.output.value >= Amount(count))
             .map!(tup => TxBuilder(tup.value.output, tup.key))
             .map!(txb => txb.split(
                     WK.Keys.byRange()
-                    .drop(uniform(0, 1378 - count, rndGen))
+                    .drop(uniform(0, KeyCount - count, rndGen))
                     .take(count)
                     .map!(k => k.address))
                 .sign());
