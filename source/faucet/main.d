@@ -41,6 +41,8 @@ import vibe.http.router;
 import vibe.http.server;
 import vibe.web.rest;
 
+static immutable KeyCount = WK.Keys.byRange().length;
+
 /// Configuration parameter for Faucet
 private struct Config
 {
@@ -183,8 +185,6 @@ public class Faucet : FaucetAPI
     private auto splitTx (UR) (UR utxo_rng, uint count)
     {
         static assert (isInputRange!UR);
-        static immutable KeyCount = WK.Keys.byRange().length;
-
         assert(count <= KeyCount);
 
         return utxo_rng
@@ -216,7 +216,7 @@ public class Faucet : FaucetAPI
     {
         static assert (isInputRange!UR);
 
-        return TxBuilder(WK.Keys[uniform(0, 1378, rndGen)].address)
+        return TxBuilder(WK.Keys[uniform(0, KeyCount, rndGen)].address)
                             .attach(utxo_rng.map!(utxo => utxo.value.output)
                             .zip(utxo_rng.map!(utxo => utxo.key)))
                             .sign();
@@ -242,7 +242,6 @@ public class Faucet : FaucetAPI
             sleep(5.seconds);
 
         const utxo_len = this.state.utxos.storage.length;
-        immutable size_t WKKeysCount = 1378;
 
         logInfo("Setting up: height=%s, %s UTXOs found", this.state.known, utxo_len);
         if (utxo_len < 200)
