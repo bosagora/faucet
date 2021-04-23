@@ -247,7 +247,7 @@ public class Faucet : FaucetAPI
         if (utxo_len < 200)
         {
             assert(utxo_len >= 8);
-            this.splitTx(this.state.utxos.storage.byKeyValue().take(8), 25)
+            this.splitTx(this.state.utxos.storage.byKeyValue().take(8), 100)
                 .each!(tx => this.client.putTransaction(tx));
         }
     }
@@ -292,15 +292,15 @@ public class Faucet : FaucetAPI
         logInfo("\tMedian: %s, Avg: %s", median, mean);
         logInfo("\tL: %s, H: %s", sutxo[0].output.value, sutxo[$-1].output.value);
 
-        if (this.state.utxos.storage.length > 200)
+        if (this.state.utxos.storage.length > 1000)
         {
-            auto tx = this.mergeTx(this.state.utxos.byKeyValue().take(16));
+            auto tx = this.mergeTx(this.state.utxos.byKeyValue().take(uniform(10, 100, rndGen)));
             this.client.putTransaction(tx);
             logDebug("Transaction sent: %s", tx);
         }
         else
         {
-            foreach (tx; this.splitTx(this.state.utxos.byKeyValue().take(16),
+            foreach (tx; this.splitTx(this.state.utxos.byKeyValue().take(uniform(1, 10, rndGen)),
                                       this.config.count))
             {
                 this.client.putTransaction(tx);
