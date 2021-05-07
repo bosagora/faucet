@@ -106,6 +106,7 @@ private struct State
                 const long delta = (cast(long) this.utxos.storage.length) - current_len;
                 logInfo("UTXO delta: %s", delta);
                 this.known = blocks[$ - 1].header.height;
+                from += blocks.length;
             } while (this.known < height);
 
             assert(this.getOwnedUTXOs().length);
