@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Faucet for BOSAGORA TesNet">
+    <title>BOSAGORA Faucet</title>
+
+    <link rel="icon" href="../assets/favicon.ico" />
+    <link rel="stylesheet" href="style.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-wEmeIV1mKuiNpC+IOBjI7aAzPcEZeedi5yW5f2yOq55WWLwNGmvvx4Um1vskeMj0" crossorigin="anonymous">
+
+    <!-- Custom styles for this template  -->
+    <link href="styles.css" rel="stylesheet">
+  </head>
+
+  <body class="text-center">
+    <main class="form-signin">
+      <img class="mb-4" src="../assets/bosagora.png" margin-left="50px">
+        <form action="send" method="post">
+          <h1 class="h3 mb-3 fw-normal">Welcome to the BOSAGORA Faucet</h1>
+            <div class="form-floating">
+              <input name="recv" type="text" class="form-control" id="floatingInput">
+              <label for="floatingInput">Enter your address</label>
+            </div>
+            <br>
+            <div class="form-floating">
+              <input name="amount" type="text" class="form-control" id="floatingInput" value="100" readonly>
+              <label for="floatingInput">Amount (fixed at 100 BOA)</label>
+            </div>
+            <br>
+              <input class="w-90 btn btn-lg btn-primary" type="submit" value="Send test BOA to address">
+        </form>
+    </main>
+  </body>
+</html>
