@@ -65,5 +65,5 @@ public interface FaucetAPI
     ***************************************************************************/
 
     @path("/send")
-    public void sendTransaction (string recv, ulong amount);
+    public void sendTransaction (@viaQuery("recv") string recv, @viaQuery("amount") ulong amount);
 }
