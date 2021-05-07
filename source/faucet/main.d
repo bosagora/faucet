@@ -28,6 +28,7 @@ import agora.serialization.Serializer;
 import agora.utils.Test;
 
 import std.algorithm;
+static import std.file;
 import std.random;
 import std.range;
 import std.stdio;
@@ -37,8 +38,10 @@ import core.time;
 
 import vibe.core.core;
 import vibe.core.log;
+import vibe.http.fileserver;
 import vibe.http.router;
 import vibe.http.server;
+import vibe.inet.url;
 import vibe.web.rest;
 
 static immutable KeyCount = WK.Keys.byRange().length;
@@ -366,6 +369,19 @@ public class Faucet : FaucetAPI
             this.client.putTransaction(tx);
         }
     }
+
+    /// Returns: The path at which the files are located
+    private string getStaticFilePath () const
+    {
+        if (std.file.exists("frontend/src/index.html"))
+        {
+            return std.file.getcwd() ~ "/frontend/src/";
+        }
+        throw new Exception("Files not found. " ~
+                            "This might mean your faucet is not installed correctly. " ~
+                            "Searched for `index.html` in '" ~ std.file.getcwd() ~
+                            "/frontend/src/'.");
+    }
 }
 
 /// Application entry point
@@ -393,9 +409,15 @@ int main (string[] args)
     settings.port = faucet.config.port;
     auto router = new URLRouter();
     router.registerRestInterface(faucet);
+
+    string path = faucet.getStaticFilePath();
+    /// Convenience redirect, as users expect that accessing '/' redirect to index.html
+    router.match(HTTPMethod.GET, "/", staticRedirect("/index.html", HTTPStatus.movedPermanently));
+    /// By default, match the underlying files
+    router.match(HTTPMethod.GET, "*", serveStaticFiles(path));
+
     logInfo("About to listen to HTTP: %s", settings.port);
     listenHTTP(settings, router);
-
     setTimer(faucet.config.interval, () => faucet.send(), true);
     return runEventLoop();
 }
