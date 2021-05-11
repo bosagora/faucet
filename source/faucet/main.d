@@ -325,7 +325,7 @@ public class Faucet : FaucetAPI
     public override void sendTransaction (string recv, ulong amount)
     {
         PublicKey pubkey = PublicKey.fromString(recv);
-        Amount leftover = Amount(amount);
+        Amount leftover = amount.coins;
         auto owned_utxo_rng = this.state.owned_utxos.byKeyValue()
             // do not pick already used UTXOs
             .filter!(pair => pair.key !in this.used_utxos);
@@ -340,7 +340,7 @@ public class Faucet : FaucetAPI
         if (leftover <= first_utxo.value.output.value)
         {
             Transaction tx = txb.draw(leftover, [pubkey]).sign();
-            logInfo("Sending %s BOA to %s", amount, recv);
+            logInfo("Sending %s BOA to %s", amount.coins, recv);
             this.client.putTransaction(tx);
         }
         else
@@ -368,7 +368,7 @@ public class Faucet : FaucetAPI
             }
 
             Transaction tx = txb.sign();
-            logInfo("Sending %s BOA to %s", amount, recv);
+            logInfo("Sending %s BOA to %s", amount.coins, recv);
             this.client.putTransaction(tx);
         }
     }
