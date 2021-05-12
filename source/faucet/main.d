@@ -16,6 +16,7 @@
 module faucet.main;
 
 import faucet.API;
+import faucet.stats;
 
 import agora.api.FullNode;
 import agora.common.Amount;
@@ -25,6 +26,8 @@ import agora.consensus.data.Transaction;
 import agora.consensus.state.UTXOSet;
 import agora.crypto.Key;
 import agora.serialization.Serializer;
+import agora.stats.Server;
+import agora.stats.Utils;
 import agora.utils.Test;
 
 import std.algorithm;
@@ -157,6 +160,24 @@ public class Faucet : FaucetAPI
 
     /***************************************************************************
 
+        Stats-related fields
+
+        Those fields are used to expose internal statistics about the faucet on
+        an HTTP interface that is ultimately queried by a Prometheus server.
+
+    ***************************************************************************/
+
+    /// Ditto
+    protected StatsServer stats_server;
+
+    /// Ditto
+    protected FaucetStats faucet_stats;
+
+    /// Ditto
+    mixin DefineCollectorForStats!("faucet_stats", "collectStats");
+
+    /***************************************************************************
+
         Constructor
 
         Params:
@@ -170,6 +191,7 @@ public class Faucet : FaucetAPI
         this.config = config;
         this.client = new RestInterfaceClient!API(address);
         this.state.utxos = new TestUTXOSet();
+        Utils.getCollectorRegistry().addCollector(&this.collectStats);
     }
 
     /*******************************************************************************
@@ -256,6 +278,7 @@ public class Faucet : FaucetAPI
             assert(utxo_len >= 8);
             this.splitTx(this.state.utxos.storage.byKeyValue().take(8), 100)
                 .each!(tx => this.client.putTransaction(tx));
+            this.faucet_stats.increaseMetricBy!"faucet_transactions_sent_total"(8);
         }
     }
 
@@ -304,6 +327,7 @@ public class Faucet : FaucetAPI
             auto tx = this.mergeTx(this.state.utxos.byKeyValue().take(uniform(10, 100, rndGen)));
             this.client.putTransaction(tx);
             logDebug("Transaction sent: %s", tx);
+            this.faucet_stats.increaseMetricBy!"faucet_transactions_sent_total"(1);
         }
         else
         {
@@ -312,6 +336,7 @@ public class Faucet : FaucetAPI
             {
                 this.client.putTransaction(tx);
                 logDebug("Transaction sent: %s", tx);
+                this.faucet_stats.increaseMetricBy!"faucet_transactions_sent_total"(1);
             }
         }
     }
@@ -343,6 +368,7 @@ public class Faucet : FaucetAPI
             Transaction tx = txb.draw(leftover, [pubkey]).sign();
             logInfo("Sending %s BOA to %s", amount.coins, recv);
             this.client.putTransaction(tx);
+            this.faucet_stats.increaseMetricBy!"faucet_transactions_sent_total"(1);
         }
         else
         {
@@ -371,6 +397,7 @@ public class Faucet : FaucetAPI
             Transaction tx = txb.sign();
             logInfo("Sending %s BOA to %s", amount.coins, recv);
             this.client.putTransaction(tx);
+            this.faucet_stats.increaseMetricBy!"faucet_transactions_sent_total"(1);
         }
     }
 }
