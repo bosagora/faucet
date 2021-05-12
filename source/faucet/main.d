@@ -29,6 +29,7 @@ import agora.utils.Test;
 
 import std.algorithm;
 static import std.file;
+import std.getopt;
 import std.random;
 import std.range;
 import std.stdio;
@@ -56,10 +57,10 @@ private struct Config
     static immutable count = 15;
 
     /// Bind address
-    public string address = "0.0.0.0";
+    public string address;
 
-    /// Bind port (default: 2766)
-    public ushort port = 0xACE;
+    /// Bind port
+    public ushort port;
 }
 
 /// Holds the state of our application and contains update methods
@@ -372,55 +373,94 @@ public class Faucet : FaucetAPI
             this.client.putTransaction(tx);
         }
     }
-
-    /// Returns: The path at which the files are located
-    private string getStaticFilePath () const
-    {
-        if (std.file.exists("frontend/src/index.html"))
-        {
-            return std.file.getcwd() ~ "/frontend/src/";
-        }
-        throw new Exception("Files not found. " ~
-                            "This might mean your faucet is not installed correctly. " ~
-                            "Searched for `index.html` in '" ~ std.file.getcwd() ~
-                            "/frontend/src/'.");
-    }
 }
 
 /// Application entry point
 int main (string[] args)
 {
+    string bind;
+    bool verbose;
+
+    auto helpInfos = getopt(
+        args,
+        "bind", &bind,
+        "v|verbose", &verbose,
+    );
+
+    if (helpInfos.helpWanted)
+    {
+        defaultGetoptPrinter(
+            "Usage: ./faucet <address>, e.g. ./faucet 'http://127.0.0.1:2826'",
+            helpInfos.options);
+    }
+
     static void printHelp ()
     {
-        writeln("Usage: ./faucet <address>");
-        writeln("Where <address> is a http endpoint, such as 'http://192.168.0.42:8080'");
+        stderr.writeln("Usage: ./faucet <address>");
+        stderr.writeln("Where <address> is a http endpoint, such as 'http://192.168.0.42:8080'");
     }
 
     if (args.length != 2)
     {
-        logInfo("Please enter one value");
+        if (args.length > 2)
+            stderr.writeln("Only one value allowed");
+        else
+            stderr.writeln("Missing address at which to send transactions");
+
         printHelp();
         return 1;
     }
 
-    logInfo("The address of node is %s", args[1]);
-    auto faucet = new Faucet(Config.init, args[1]);
+    Config config;
+    if (bind.length) try
+    {
+        auto bindurl = URL(bind);
+        config.address = bindurl.host;
+        config.port = bindurl.port;
+    }
+    catch (Exception exc)
+    {
+        stderr.writeln("Could not parse '", bind, "' as a valid URL");
+        stderr.writeln("Make sure the address contains a scheme, e.g. 'http://127.0.0.1:2766'");
+        return 1;
+    }
+
+    logInfo("We'll be sending transactions to %s", args[1]);
+    auto faucet = new Faucet(config, args[1]);
     faucet.setup(faucet.config.count);
 
-    setLogLevel(LogLevel.info);
-    auto settings = new HTTPServerSettings(faucet.config.address);
-    settings.port = faucet.config.port;
+    setLogLevel(verbose ? LogLevel.trace : LogLevel.info);
+
+    setTimer(faucet.config.interval, () => faucet.send(), true);
+    auto listener = bind.length ? startListeningInterface(config, faucet) : HTTPListener.init;
+    return runEventLoop();
+}
+
+private HTTPListener startListeningInterface (in Config config, Faucet faucet)
+{
+    auto settings = new HTTPServerSettings(config.address);
+    settings.port = config.port;
     auto router = new URLRouter();
     router.registerRestInterface(faucet);
 
-    string path = faucet.getStaticFilePath();
+    string path = getStaticFilePath();
     /// Convenience redirect, as users expect that accessing '/' redirect to index.html
     router.match(HTTPMethod.GET, "/", staticRedirect("/index.html", HTTPStatus.movedPermanently));
     /// By default, match the underlying files
     router.match(HTTPMethod.GET, "*", serveStaticFiles(path));
 
-    logInfo("About to listen to HTTP: %s", settings.port);
-    listenHTTP(settings, router);
-    setTimer(faucet.config.interval, () => faucet.send(), true);
-    return runEventLoop();
+    logInfo("About to listen to HTTP: %s:%d", config.address, config.port);
+    return listenHTTP(settings, router);
+}
+
+/// Returns: The path at which the files are located
+private string getStaticFilePath ()
+{
+    if (std.file.exists("frontend/src/index.html"))
+        return std.file.getcwd() ~ "/frontend/src/";
+
+    throw new Exception("Files not found. " ~
+                        "This might mean your faucet is not installed correctly. " ~
+                        "Searched for `index.html` in '" ~ std.file.getcwd() ~
+                        "/frontend/src/'.");
 }
