@@ -64,6 +64,9 @@ private struct Config
 
     /// Bind port
     public ushort port;
+
+    /// Stats port (default: 9113)
+    public ushort stats_port = 9113;
 }
 
 /// Holds the state of our application and contains update methods
@@ -407,10 +410,12 @@ int main (string[] args)
 {
     string bind;
     bool verbose;
+    Config config;
 
     auto helpInfos = getopt(
         args,
         "bind", &bind,
+        "stats-port", &config.stats_port,
         "v|verbose", &verbose,
     );
 
@@ -438,7 +443,6 @@ int main (string[] args)
         return 1;
     }
 
-    Config config;
     if (bind.length) try
     {
         auto bindurl = URL(bind);
@@ -454,6 +458,7 @@ int main (string[] args)
 
     logInfo("We'll be sending transactions to %s", args[1]);
     auto faucet = new Faucet(config, args[1]);
+    StatsServer stats_server = new StatsServer(faucet.config.stats_port);
     faucet.setup(faucet.config.count);
 
     setLogLevel(verbose ? LogLevel.trace : LogLevel.info);
