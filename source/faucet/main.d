@@ -461,7 +461,7 @@ int main (string[] args)
 
     logInfo("We'll be sending transactions to %s", args[1]);
     auto faucet = new Faucet(config, args[1]);
-    StatsServer stats_server = new StatsServer(faucet.config.stats_port);
+    faucet.stats_server = new StatsServer(faucet.config.stats_port);
 
     setLogLevel(verbose ? LogLevel.trace : LogLevel.info);
 
