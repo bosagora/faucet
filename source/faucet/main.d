@@ -513,13 +513,13 @@ private HTTPListener startListeningInterface (in Config config, Faucet faucet)
 /// Returns: The path at which the files are located
 private string getStaticFilePath ()
 {
-    if (std.file.exists("frontend/src/index.html"))
-        return std.file.getcwd() ~ "/frontend/src/";
+    if (std.file.exists("frontend/index.html"))
+        return std.file.getcwd() ~ "/frontend/";
 
     throw new Exception("Files not found. " ~
                         "This might mean your faucet is not installed correctly. " ~
                         "Searched for `index.html` in '" ~ std.file.getcwd() ~
-                        "/frontend/src/'.");
+                        "/frontend/'.");
 }
 
 /// Global because we need to access it from our signal handler
