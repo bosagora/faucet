@@ -301,6 +301,9 @@ public class Faucet : FaucetAPI
 
     void send ()
     {
+        if (this.state.utxos.storage.length == 0)
+            this.setup(inst.config.count);
+
         if (this.state.update(this.client, Height(this.state.known + 1)))
             logTrace("State has been updated: %s", this.state.known);
 
@@ -459,7 +462,6 @@ int main (string[] args)
     logInfo("We'll be sending transactions to %s", args[1]);
     auto faucet = new Faucet(config, args[1]);
     StatsServer stats_server = new StatsServer(faucet.config.stats_port);
-    faucet.setup(faucet.config.count);
 
     setLogLevel(verbose ? LogLevel.trace : LogLevel.info);
 
