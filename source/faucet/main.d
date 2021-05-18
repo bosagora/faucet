@@ -161,6 +161,12 @@ public class Faucet : FaucetAPI
     /// A client object implementing `API`
     private API client;
 
+    /// Timer on which transactions are generated and send
+    public Timer sendTx;
+
+    /// Listener for the user interface, if any
+    public HTTPListener webInterface;
+
     /***************************************************************************
 
         Stats-related fields
@@ -459,14 +465,31 @@ int main (string[] args)
         return 1;
     }
 
+    // We need proper shut down or Faucet get stuck, see bosagora/faucet#72
+    disableDefaultSignalHandlers();
+    version (Posix)
+    {
+        import core.sys.posix.signal;
+
+        sigset_t sigset;
+        sigemptyset(&sigset);
+
+        sigaction_t siginfo;
+        siginfo.sa_handler = getSignalHandler();
+        siginfo.sa_mask = sigset;
+        siginfo.sa_flags = SA_RESTART;
+        sigaction(SIGINT, &siginfo, null);
+        sigaction(SIGTERM, &siginfo, null);
+    }
+
     logInfo("We'll be sending transactions to %s", args[1]);
-    auto faucet = new Faucet(config, args[1]);
-    faucet.stats_server = new StatsServer(faucet.config.stats_port);
+    inst = new Faucet(config, args[1]);
+    inst.stats_server = new StatsServer(inst.config.stats_port);
 
     setLogLevel(verbose ? LogLevel.trace : LogLevel.info);
 
-    setTimer(faucet.config.interval, () => faucet.send(), true);
-    auto listener = bind.length ? startListeningInterface(config, faucet) : HTTPListener.init;
+    inst.sendTx = setTimer(inst.config.interval, () => inst.send(), true);
+    inst.webInterface = bind.length ? startListeningInterface(config, inst) : HTTPListener.init;
     return runEventLoop();
 }
 
@@ -497,4 +520,44 @@ private string getStaticFilePath ()
                         "This might mean your faucet is not installed correctly. " ~
                         "Searched for `index.html` in '" ~ std.file.getcwd() ~
                         "/frontend/src/'.");
+}
+
+/// Global because we need to access it from our signal handler
+private Faucet inst;
+
+/// Type of the handler that is called when a signal is received
+private alias SigHandlerT = extern(C) void function (int sig) nothrow;
+
+/// Returns a signal handler
+/// This routine is there solely to ensure the function has a mangled name,
+/// and doesn't accidentally conflict with other code.
+private SigHandlerT getSignalHandler () @safe pure nothrow @nogc
+{
+    extern(C) void signalHandler (int signal) nothrow
+    {
+        // Calling `printf` because `writeln` is not `@nogc`
+        printf("Received signal %d, shutting down listeners...\n", signal);
+        try
+        {
+            inst.webInterface.stopListening();
+            inst.webInterface = typeof(inst.webInterface).init;
+            inst.stats_server.shutdown();
+            inst.sendTx.stop();
+            inst.sendTx = inst.sendTx.init;
+            printf("Terminating event loop...\n");
+            exitEventLoop();
+        }
+        catch (Throwable exc)
+        {
+            printf("Exception thrown while shutting down: %.*s\n",
+                   cast(int) exc.msg.length, exc.msg.ptr);
+            debug {
+                scope (failure) assert(0);
+                writeln("========================================");
+                writeln("Full stack trace: ", exc);
+            }
+        }
+    }
+
+    return &signalHandler;
 }
