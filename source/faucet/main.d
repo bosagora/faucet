@@ -313,9 +313,6 @@ public class Faucet : FaucetAPI
         if (this.state.update(this.client, Height(this.state.known + 1)))
             logTrace("State has been updated: %s", this.state.known);
 
-        if (this.state.known < 1)
-            return logInfo("Waiting for setup to be completed");
-
         logInfo("About to send transactions...");
 
         // Sort them so we don't iterate multiple time
