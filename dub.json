@@ -48,6 +48,7 @@
 
     "dependencies": {
         "agora" : { "version": "*" },
+        "dyaml" : { "version": "*" },
         "ocean" : { "version": "*" },
         "vibe-d": { "version": "*" }
     },

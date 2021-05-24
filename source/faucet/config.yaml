@@ -1,0 +1,12 @@
+################################################################################
+##                                  Sample keys                               ##
+################################################################################
+
+# When we deploy Faucet on the real TestNet, the keys used will not be well-known.
+keys:
+  - SAQXRDHTWME4GUIVNYCKPN433VJ4BJP2L2T7UWHGSSW47VFC67EQFY3S
+  - SC3H3ADGT3YGLMDWCLKZ2GILDHDTC4WDE7M3G4URQPWJZZM43TTAM2QG
+  - SBIJAVYYCSRV5RNO2WVTT25H6VZTEV3YSE7U7WT7UQUNSVBUGB6QNBWG
+  - SAZO4WA5SXUN3J6XBXZCFPXJJZ62IQAJYAG2KBVWF2QZKTU2WK3QTNMV
+  - SAFIQC7HRZPVPEG47ZHS3OBBCYDREHNC4DEKM3QODM7WKPZPU7VQXCPI
+  - SAWI3JZWDDSQR6AX4DRG2OMS26Y6XY4X2WA3FK6D5UW4WTU74GUQXRZP

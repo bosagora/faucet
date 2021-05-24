@@ -30,8 +30,13 @@ import agora.stats.Server;
 import agora.stats.Utils;
 import agora.utils.Test;
 
+import dyaml.node;
+import dyaml.loader;
+
 import std.algorithm;
+import std.exception;
 static import std.file;
+import std.format;
 import std.getopt;
 import std.random;
 import std.range;
@@ -67,6 +72,9 @@ private struct Config
 
     /// Stats port (default: 9113)
     public ushort stats_port = 9113;
+
+    /// Keys from the config
+    SecretKey[PublicKey] keys;
 }
 
 /// Holds the state of our application and contains update methods
@@ -145,7 +153,7 @@ private struct State
 public class Faucet : FaucetAPI
 {
     /// Config instance
-    private Config config;
+    private const Config config;
 
     /// The state instance represents the current state of the application.
     /// It is updated in the initial setup, and before a set of transactions
@@ -417,6 +425,10 @@ int main (string[] args)
     string bind;
     bool verbose;
     Config config;
+    auto seeds = parseConfigFile("config.yaml");
+
+    seeds.map!(s => KeyPair.fromSeed(SecretKey.fromString(s)))
+         .each!(kp => config.keys.require(kp.address, kp.secret));
 
     auto helpInfos = getopt(
         args,
@@ -517,6 +529,34 @@ private string getStaticFilePath ()
                         "This might mean your faucet is not installed correctly. " ~
                         "Searched for `index.html` in '" ~ std.file.getcwd() ~
                         "/frontend/'.");
+}
+
+/// Parse the config section
+private const(string)[] parseSequence (string section,
+        Node root, bool optional = false)
+{
+    if (auto node = section in root)
+        enforce(root[section].type == NodeType.sequence,
+            format("`%s` section must be a sequence", section));
+    else if (optional)
+        return null;
+    else
+        throw new Exception(
+            format("The '%s' section is mandatory and must " ~
+                "specify at least one item", section));
+
+    string[] result;
+    foreach (string item; root[section])
+        result ~= item;
+
+    return result;
+}
+
+/// Parse the config file
+public const(string)[] parseConfigFile (string config_path)
+{
+    Node root = Loader.fromFile(config_path).load();
+    return parseSequence("keys", root);
 }
 
 /// Global because we need to access it from our signal handler
