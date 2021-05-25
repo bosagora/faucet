@@ -29,6 +29,7 @@ import agora.serialization.Serializer;
 import agora.stats.Server;
 import agora.stats.Utils;
 import agora.utils.Test;
+import agora.script.Lock;
 
 import dyaml.node;
 import dyaml.loader;
@@ -77,6 +78,69 @@ private struct Config
     SecretKey[PublicKey] keys;
 }
 
+/// Override the symbol 'TxBuilder' and use the Config as a default
+public struct Builder
+{
+    /// Underlying instance
+    TxBuilder builder;
+
+    /// Forward methods
+    alias builder this;
+
+    /// Forward to the underlying TxBuilder constructor
+    public this (in PublicKey refundMe) @safe pure nothrow
+    {
+        this.builder = TxBuilder(refundMe);
+    }
+
+    /// Ditto
+    public this (in Lock lock) @safe pure nothrow
+    {
+        this.builder = TxBuilder(lock);
+    }
+
+    /// Ditto
+    public this (const Transaction tx) @safe nothrow
+    {
+        this.builder = TxBuilder(tx);
+    }
+
+    /// Ditto
+    public this (const Transaction tx, uint index) @safe nothrow
+    {
+        this.builder = TxBuilder(tx, index);
+    }
+
+    /// Ditto
+    public this (const Transaction tx, uint index, in Lock lock) @safe nothrow
+    {
+        this.builder = TxBuilder(tx, index, lock);
+    }
+
+    /// Ditto
+    public this (in Output utxo, in Hash hash) @safe nothrow
+    {
+        this.builder = TxBuilder(utxo, hash);
+    }
+
+    /// Forward to `TxBuilder.sign` with a different default unlocker
+    public Transaction sign (in OutputType type = OutputType.Payment, const(ubyte)[] data = [],
+        Height lock_height = Height(0), uint unlock_age = 0) @safe nothrow
+    {
+        return this.builder.sign(type, data, lock_height, unlock_age, &this.keyUnlocker);
+    }
+
+    ///
+    private Unlock keyUnlocker (in Transaction tx, in OutputRef out_ref) @safe nothrow
+    {
+        auto ownerSecret = inst.config.keys[out_ref.output.address];
+        assert(ownerSecret !is SecretKey.init,
+                "Address not known: " ~ out_ref.output.address.toString());
+
+        return genKeyUnlock(KeyPair.fromSeed(ownerSecret).sign(tx));
+    }
+}
+
 /// Holds the state of our application and contains update methods
 private struct State
 {
@@ -91,8 +155,7 @@ private struct State
     private UTXO[Hash] getOwnedUTXOs () nothrow @safe
     {
         return this.utxos.storage.byKeyValue()
-                   .filter!(
-                       kv => kv.value.output.address == WK.Keys[kv.value.output.address].address)
+                   .filter!(tup => tup.value.output.address in inst.config.keys)
                    .map!(kv => tuple(kv.key, kv.value))
                    .assocArray();
     }
@@ -235,7 +298,7 @@ public class Faucet : FaucetAPI
 
         return utxo_rng
             .filter!(tup => tup.value.output.value >= Amount(count))
-            .map!(tup => TxBuilder(tup.value.output, tup.key))
+            .map!(tup => Builder(tup.value.output, tup.key))
             .map!(txb => txb.split(
                     WK.Keys.byRange()
                     .drop(uniform(0, KeyCount - count, rndGen))
@@ -262,7 +325,7 @@ public class Faucet : FaucetAPI
     {
         static assert (isInputRange!UR);
 
-        return TxBuilder(WK.Keys[uniform(0, KeyCount, rndGen)].address)
+        return Builder(WK.Keys[uniform(0, KeyCount, rndGen)].address)
                             .attach(utxo_rng.map!(utxo => utxo.value.output)
                             .zip(utxo_rng.map!(utxo => utxo.key)))
                             .sign();
@@ -380,7 +443,7 @@ public class Faucet : FaucetAPI
         owned_utxo_rng.popFront();
         assert(first_utxo.value.output.value > Amount(0));
 
-        TxBuilder txb = TxBuilder(first_utxo.value.output, first_utxo.key);
+        Builder txb = Builder(first_utxo.value.output, first_utxo.key);
 
         if (leftover <= first_utxo.value.output.value)
         {
@@ -438,7 +501,10 @@ int main (string[] args)
     );
 
     if (configPath == "none")
+    {
         WK.Keys.byRange().each!(kp => config.keys.require(kp.address, kp.secret));
+        config.keys.require(WK.Keys.Genesis.address, WK.Keys.Genesis.secret);
+    }
     else
     {
         auto seeds = parseConfigFile(configPath);
