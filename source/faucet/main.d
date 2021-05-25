@@ -293,7 +293,8 @@ public class Faucet : FaucetAPI
         if (utxo_len < 200)
         {
             assert(utxo_len >= 8);
-            this.splitTx(this.state.utxos.storage.byKeyValue().take(8), 100)
+            this.splitTx(this.state.utxos.storage.byKeyValue(), 100)
+                .take(8)
                 .each!(tx => this.client.putTransaction(tx));
             this.faucet_stats.increaseMetricBy!"faucet_transactions_sent_total"(8);
         }
@@ -348,8 +349,9 @@ public class Faucet : FaucetAPI
         }
         else
         {
-            foreach (tx; this.splitTx(this.state.utxos.byKeyValue().take(uniform(1, 10, rndGen)),
-                                      this.config.count))
+            auto rng = this.splitTx(this.state.utxos.byKeyValue(), this.config.count)
+                .take(uniform(1, 10, rndGen));
+            foreach (tx; rng)
             {
                 this.client.putTransaction(tx);
                 logDebug("Transaction sent: %s", tx);
