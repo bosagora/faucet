@@ -435,10 +435,15 @@ int main (string[] args)
         "v|verbose", &verbose,
     );
 
-    auto seeds = parseConfigFile(configPath);
+    if (configPath == "none")
+        WK.Keys.byRange().each!(kp => config.keys.require(kp.address, kp.secret));
+    else
+    {
+        auto seeds = parseConfigFile(configPath);
 
-    seeds.map!(s => KeyPair.fromSeed(SecretKey.fromString(s)))
-         .each!(kp => config.keys.require(kp.address, kp.secret));
+        seeds.map!(s => KeyPair.fromSeed(SecretKey.fromString(s)))
+            .each!(kp => config.keys.require(kp.address, kp.secret));
+    }
 
     if (helpInfos.helpWanted)
     {
