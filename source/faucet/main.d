@@ -424,18 +424,21 @@ int main (string[] args)
 {
     string bind;
     bool verbose;
+    string configPath = "config.yaml";
     Config config;
-    auto seeds = parseConfigFile("config.yaml");
-
-    seeds.map!(s => KeyPair.fromSeed(SecretKey.fromString(s)))
-         .each!(kp => config.keys.require(kp.address, kp.secret));
 
     auto helpInfos = getopt(
         args,
         "bind", &bind,
+        "c|config", &configPath,
         "stats-port", &config.stats_port,
         "v|verbose", &verbose,
     );
+
+    auto seeds = parseConfigFile(configPath);
+
+    seeds.map!(s => KeyPair.fromSeed(SecretKey.fromString(s)))
+         .each!(kp => config.keys.require(kp.address, kp.secret));
 
     if (helpInfos.helpWanted)
     {
