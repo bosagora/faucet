@@ -1,0 +1,10 @@
+# Various build folder, modeled after Agora
+.dub/
+bin/
+submodules/*/.dub/
+submodules/*/*.a
+submodules/agora/source/scpp/build/
+submodules/vibe.d/*/.dub/
+submodules/vibe.d/*/*.a
+submodules/vibe.d/examples/
+submodules/vibe.d/tests/
