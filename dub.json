@@ -10,6 +10,8 @@
     "license": "MIT",
 
     "dflags": [ "-i", "-preview=in" ],
+    "lflags-linux": [ "--export-dynamic" ],
+    "lflags-osx": [ "-export_dynamic" ],
     "libs": [ "sqlite3", "sodium" ],
 
     "configurations": [
