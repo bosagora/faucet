@@ -3,6 +3,7 @@
     "description": "Your friendly transaction-happy bot",
 
     "targetPath": "bin/",
+    "targetType": "executable",
 
     "authors": [ "BPF Korea" ],
     "copyright": "Copyright © 2020-2021, BOSAGORA Foundation",
@@ -10,6 +11,26 @@
 
     "dflags": [ "-i", "-preview=in" ],
     "libs": [ "sqlite3", "sodium" ],
+
+    "configurations": [
+        {
+            "name": "epoll",
+            "platforms": [ "linux" ],
+            "versions": [ "EventcoreEpollDriver" ]
+        },
+        {
+            "name": "cfrunloop",
+            "platforms": [ "osx" ],
+            "versions": [ "EventcoreCFRunLoopDriver" ],
+            "lflags": [ "-framework", "CoreFoundation", "-framework", "CoreServices" ]
+        },
+        {
+            "name": "winapi",
+            "platforms": [ "windows" ],
+            "versions": [ "EventcoreWinAPIDriver" ]
+        }
+    ],
+
     "importPaths": [
         "source/",
 
