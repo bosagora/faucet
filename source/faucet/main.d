@@ -59,10 +59,13 @@ static immutable KeyCount = WK.Keys.byRange().length;
 private struct Config
 {
     /// How frequently we run our periodic task
-    static immutable interval = 30.seconds;
+    static interval = 30.seconds;
 
     /// Between how many addresses we split a transaction by
-    static immutable count = 15;
+    static count = 15;
+
+    /// Maximum number of utxo before merging instead of splitting
+    static max_utxos = 1000;
 
     /// Bind address
     public string address;
@@ -340,7 +343,7 @@ public class Faucet : FaucetAPI
         logInfo("\tMedian: %s, Avg: %s", median, mean);
         logInfo("\tL: %s, H: %s", sutxo[0].output.value, sutxo[$-1].output.value);
 
-        if (this.state.utxos.storage.length > 1000)
+        if (this.state.utxos.storage.length > this.config.max_utxos)
         {
             auto tx = this.mergeTx(this.state.utxos.byKeyValue().take(uniform(10, 100, rndGen)));
             this.client.putTransaction(tx);
@@ -506,7 +509,7 @@ int main (string[] args)
     inst.stats_server = new StatsServer(inst.config.stats_port);
 
     setLogLevel(verbose ? LogLevel.trace : LogLevel.info);
-
+    logInfo("Setting timer of %s to send transactions", inst.config.interval);
     inst.sendTx = setTimer(inst.config.interval, () => inst.send(), true);
     inst.webInterface = bind.length ? startListeningInterface(config, inst) : HTTPListener.init;
     return runEventLoop();
@@ -566,6 +569,9 @@ private const(string)[] parseSequence (string section,
 public const(string)[] parseConfigFile (string config_path)
 {
     Node root = Loader.fromFile(config_path).load();
+    inst.config.interval = root["interval"].as!long.seconds;
+    inst.config.count = root["count"].as!int;
+    inst.config.max_utxos = root["max_utxos"].as!int;
     return parseSequence("keys", root);
 }
 
