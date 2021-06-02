@@ -53,7 +53,6 @@
         "submodules/vibe-core/source/",
         "submodules/vibe.d/crypto/",
         "submodules/vibe.d/data/",
-        "submodules/vibe.d/db/",
         "submodules/vibe.d/http/",
         "submodules/vibe.d/inet/",
         "submodules/vibe.d/source/",
