@@ -441,6 +441,8 @@ int main (string[] args)
         WK.Keys.byRange().each!(kp => config.keys.require(kp.address, kp.secret));
     else
     {
+        config.keys.require(WK.Keys.Genesis.address, WK.Keys.Genesis.secret);
+
         auto seeds = parseConfigFile(configPath);
 
         seeds.map!(s => KeyPair.fromSeed(SecretKey.fromString(s)))
