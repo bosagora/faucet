@@ -36,7 +36,7 @@ import dyaml.loader;
 
 import std.algorithm;
 import std.exception;
-static import std.file;
+import std.file;
 import std.format;
 import std.getopt;
 import std.random;
@@ -56,26 +56,90 @@ import vibe.web.rest;
 
 static immutable KeyCount = WK.Keys.byRange().length;
 
+/// The keys that will be used for generating transactions
+private SecretKey[PublicKey] secret_keys;
+
+/// The configuration for faucet as a faucet and a tx generator
+private Config config;
+
+private struct TxGenerator
+{
+    /// How frequently we run our periodic task
+    ulong send_interval;
+
+    /// Between how many addresses we split a transaction by
+    uint split_count;
+
+    /// Maximum number of utxo before merging instead of splitting
+    uint merge_threshold;
+
+    /// Addresses to send the transactions to
+    string[] addresses;
+
+    /// Keys from the config
+    string[] keys;
+
+    /// Stats port (default: 9113)
+    ushort stats_port;
+
+    this (ulong send_interval, uint split_count, uint merge_threshold,
+        string[] addresses, string[] keys, ushort stats_port = 9113)
+    {
+        this.send_interval = send_interval;
+        this.split_count = split_count;
+        this.merge_threshold = merge_threshold;
+        this.addresses = addresses;
+        this.keys = keys;
+        this.stats_port = stats_port;
+    }
+
+    this (Node node) @safe
+    {
+        send_interval = yaml_node["send_interval"].as!ulong;
+        split_count = yaml_node["split_count"].as!uint;
+        merge_threshold = yaml_node["merge_threshold"].as!uint;
+        () @trusted { addresses = parseSequence("addresses", yaml_node, true); }();
+        () @trusted { keys = parseSequence("keys", yaml_node, false); }();
+        stats_port = yaml_node["stats_port"].as!ushort;
+    }
+}
+
+/// The Config for the faucet web
+private struct Web
+{
+    /// Address to bind for website
+    string address;
+
+    /// Port to bind for website
+    ushort port;
+
+    this (string address, ushort port = 2766)
+    {
+        this.address = address;
+        this.port = port;
+    }
+
+    this (Node node) @safe
+    {
+        this.address = node["address"].as!string;
+        this.port = node["port"].as!ushort;
+    }
+}
+
 /// Configuration parameter for Faucet
 private struct Config
 {
-    /// How frequently we run our periodic task
-    static immutable interval = 30.seconds;
+    /// configuration for tx generator
+    TxGenerator tx_generator;
 
-    /// Between how many addresses we split a transaction by
-    static immutable count = 15;
+    /// config for faucet web
+    Web web;
 
-    /// Bind address
-    public string address;
-
-    /// Bind port
-    public ushort port;
-
-    /// Stats port (default: 9113)
-    public ushort stats_port = 9113;
-
-    /// Keys from the config
-    SecretKey[PublicKey] keys;
+    this (TxGenerator tx_generator, Web web)
+    {
+        this.tx_generator = tx_generator;
+        this.web = web;
+    }
 }
 
 /// Override the symbol 'TxBuilder' and use the Config as a default
@@ -133,7 +197,7 @@ public struct Builder
     ///
     private Unlock keyUnlocker (in Transaction tx, in OutputRef out_ref) @safe nothrow
     {
-        auto ownerSecret = inst.config.keys[out_ref.output.address];
+        auto ownerSecret = secret_keys[out_ref.output.address];
         assert(ownerSecret !is SecretKey.init,
                 "Address not known: " ~ out_ref.output.address.toString());
 
@@ -155,7 +219,7 @@ private struct State
     private UTXO[Hash] getOwnedUTXOs () nothrow @safe
     {
         return this.utxos.storage.byKeyValue()
-                   .filter!(tup => tup.value.output.address in inst.config.keys)
+                   .filter!(tup => tup.value.output.address in secret_keys)
                    .map!(kv => tuple(kv.key, kv.value))
                    .assocArray();
     }
@@ -215,9 +279,6 @@ private struct State
 
 public class Faucet : FaucetAPI
 {
-    /// Config instance
-    private const Config config;
-
     /// The state instance represents the current state of the application.
     /// It is updated in the initial setup, and before a set of transactions
     /// is sent. The update function takes the known height as a parameter,
@@ -266,10 +327,10 @@ public class Faucet : FaucetAPI
 
     ***************************************************************************/
 
-    public this (const Config config, const Address address)
+    public this ()
     {
-        this.config = config;
-        this.client = new RestInterfaceClient!API(address);
+        /// Just use first address for now
+        this.client = new RestInterfaceClient!API(config.tx_generator.addresses[0]);
         this.state.utxos = new TestUTXOSet();
         Utils.getCollectorRegistry().addCollector(&this.collectStats);
     }
@@ -380,8 +441,9 @@ public class Faucet : FaucetAPI
     void send ()
     {
         if (this.state.utxos.storage.length == 0)
-            this.setup(inst.config.count);
+            this.setup(config.tx_generator.split_count);
 
+        // For now we always send to first client
         if (this.state.update(this.client, Height(this.state.known + 1)))
             logTrace("State has been updated: %s", this.state.known);
 
@@ -403,7 +465,7 @@ public class Faucet : FaucetAPI
         logInfo("\tMedian: %s, Avg: %s", median, mean);
         logInfo("\tL: %s, H: %s", sutxo[0].output.value, sutxo[$-1].output.value);
 
-        if (this.state.utxos.storage.length > 1000)
+        if (this.state.utxos.storage.length > config.tx_generator.merge_threshold)
         {
             auto tx = this.mergeTx(this.state.utxos.byKeyValue().take(uniform(10, 100, rndGen)));
             this.client.putTransaction(tx);
@@ -412,7 +474,7 @@ public class Faucet : FaucetAPI
         }
         else
         {
-            auto rng = this.splitTx(this.state.utxos.byKeyValue(), this.config.count)
+            auto rng = this.splitTx(this.state.utxos.byKeyValue(), config.tx_generator.split_count)
                 .take(uniform(1, 10, rndGen));
             foreach (tx; rng)
             {
@@ -490,58 +552,35 @@ int main (string[] args)
     string bind;
     bool verbose;
     string configPath = "config.yaml";
-    Config config;
 
     auto helpInfos = getopt(
         args,
         "bind", &bind,
         "c|config", &configPath,
-        "stats-port", &config.stats_port,
+        "stats-port", &config.tx_generator.stats_port,
         "v|verbose", &verbose,
     );
-
-    if (configPath == "none")
-    {
-        WK.Keys.byRange().each!(kp => config.keys.require(kp.address, kp.secret));
-        config.keys.require(WK.Keys.Genesis.address, WK.Keys.Genesis.secret);
-    }
-    else
-    {
-        auto seeds = parseConfigFile(configPath);
-
-        seeds.map!(s => KeyPair.fromSeed(SecretKey.fromString(s)))
-            .each!(kp => config.keys.require(kp.address, kp.secret));
-    }
 
     if (helpInfos.helpWanted)
     {
         defaultGetoptPrinter(
             "Usage: ./faucet <address>, e.g. ./faucet 'http://127.0.0.1:2826'",
             helpInfos.options);
+        return 0;
     }
 
     static void printHelp ()
     {
-        stderr.writeln("Usage: ./faucet <address>");
-        stderr.writeln("Where <address> is a http endpoint, such as 'http://192.168.0.42:8080'");
-    }
-
-    if (args.length != 2)
-    {
-        if (args.length > 2)
-            stderr.writeln("Only one value allowed");
-        else
-            stderr.writeln("Missing address at which to send transactions");
-
-        printHelp();
-        return 1;
+        stderr.writeln("Usage: ./faucet -c {'none'|<path>} [<address>]");
+        stderr.writeln("Where <address> is an http endpoint, such as 'http://192.168.0.42:8080'");
+        stderr.writeln("  and path is a config yaml filepath");
     }
 
     if (bind.length) try
     {
         auto bindurl = URL(bind);
-        config.address = bindurl.host;
-        config.port = bindurl.port;
+        config.web.address = bindurl.host;
+        config.web.port = bindurl.port;
     }
     catch (Exception exc)
     {
@@ -567,21 +606,58 @@ int main (string[] args)
         sigaction(SIGTERM, &siginfo, null);
     }
 
-    logInfo("We'll be sending transactions to %s", args[1]);
-    inst = new Faucet(config, args[1]);
-    inst.stats_server = new StatsServer(inst.config.stats_port);
+    if (configPath == "none" || !configPath.exists)
+    {
+        if (args.length == 1)
+        {
+            stderr.writeln("Missing address at which to send transactions");
+            printHelp();
+            return 1;
+        }
+        WK.Keys.byRange().each!(kp => secret_keys.require(kp.address, kp.secret));
+        TxGenerator default_generator = TxGenerator(30, 15, 1000, [args[1]], []);
+        Web default_web = Web("127.0.0.1");
+        config = Config(default_generator, default_web);
+        secret_keys.require(WK.Keys.Genesis.address, WK.Keys.Genesis.secret);
+    }
+    else
+    {
+        logInfo("Loading Configuration from %s", configPath);
+        config = parseConfigFile(configPath);
+        config.tx_generator.keys.map!(k =>
+            KeyPair.fromSeed(SecretKey.fromString(k)))
+                .each!(kp => secret_keys.require(kp.address, kp.secret));
+    }
+    logInfo("Configuration: %s", config);
+
+    if (bind.length) try
+    {
+        auto bindurl = URL(bind);
+        string address = bindurl.host;
+        uint port = bindurl.port;
+    }
+    catch (Exception exc)
+    {
+        stderr.writeln("Could not parse '", bind, "' as a valid URL");
+        stderr.writeln("Make sure the address contains a scheme, e.g. 'http://127.0.0.1:2766'");
+        return 1;
+    }
+
+    logInfo("We'll be sending transactions to %s", config.tx_generator.addresses[0]);
+    inst = new Faucet();
+    inst.stats_server = new StatsServer(config.tx_generator.stats_port);
 
     setLogLevel(verbose ? LogLevel.trace : LogLevel.info);
 
-    inst.sendTx = setTimer(inst.config.interval, () => inst.send(), true);
+    inst.sendTx = setTimer(config.tx_generator.send_interval.seconds, () => inst.send(), true);
     inst.webInterface = bind.length ? startListeningInterface(config, inst) : HTTPListener.init;
     return runEventLoop();
 }
 
 private HTTPListener startListeningInterface (in Config config, Faucet faucet)
 {
-    auto settings = new HTTPServerSettings(config.address);
-    settings.port = config.port;
+    auto settings = new HTTPServerSettings(config.web.address);
+    settings.port = config.web.port;
     auto router = new URLRouter();
     router.registerRestInterface(faucet);
 
@@ -591,7 +667,7 @@ private HTTPListener startListeningInterface (in Config config, Faucet faucet)
     /// By default, match the underlying files
     router.match(HTTPMethod.GET, "*", serveStaticFiles(path));
 
-    logInfo("About to listen to HTTP: %s:%d", config.address, config.port);
+    logInfo("About to listen to HTTP: %s:%d", config.web.address, config.web.port);
     return listenHTTP(settings, router);
 }
 
@@ -608,7 +684,7 @@ private string getStaticFilePath ()
 }
 
 /// Parse the config section
-private const(string)[] parseSequence (string section,
+private string[] parseSequence (string section,
         Node root, bool optional = false)
 {
     if (auto node = section in root)
@@ -629,10 +705,12 @@ private const(string)[] parseSequence (string section,
 }
 
 /// Parse the config file
-public const(string)[] parseConfigFile (string config_path)
+public Config parseConfigFile (string configPath)
 {
-    Node root = Loader.fromFile(config_path).load();
-    return parseSequence("keys", root);
+    Node root = Loader.fromFile(configPath).load();
+    return Config(
+        TxGenerator(root["tx_generator"]),
+        Web(root["web"]));
 }
 
 /// Global because we need to access it from our signal handler
