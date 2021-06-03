@@ -291,7 +291,7 @@ public class Faucet : FaucetAPI
     private UTXO[Hash] used_utxos;
 
     /// A client object implementing `API`
-    private API client;
+    private API[] clients;
 
     /// Timer on which transactions are generated and send
     public Timer sendTx;
@@ -329,10 +329,24 @@ public class Faucet : FaucetAPI
 
     public this ()
     {
-        /// Just use first address for now
-        this.client = new RestInterfaceClient!API(config.tx_generator.addresses[0]);
+        // Create client for each address
+        config.tx_generator.addresses.each!(address =>
+            this.clients ~= new RestInterfaceClient!API(address));
         this.state.utxos = new TestUTXOSet();
         Utils.getCollectorRegistry().addCollector(&this.collectStats);
+    }
+
+    /*******************************************************************************
+
+        Take one of the clients selecting it randomly
+
+        Returns:
+          A client to send transactions or requests
+
+    *******************************************************************************/
+    private API randomClient () @trusted
+    {
+        return choice(this.clients);
     }
 
     /*******************************************************************************
@@ -408,7 +422,7 @@ public class Faucet : FaucetAPI
 
     public void setup (uint count)
     {
-        while (!this.state.update(this.client, Height(0)))
+        while (!this.state.update(randomClient(), Height(0)))
             sleep(5.seconds);
 
         const utxo_len = this.state.utxos.storage.length;
@@ -419,7 +433,7 @@ public class Faucet : FaucetAPI
             assert(utxo_len >= 8);
             this.splitTx(this.state.utxos.storage.byKeyValue(), 100)
                 .take(8)
-                .each!(tx => this.client.putTransaction(tx));
+                .each!(tx => randomClient().putTransaction(tx));
             this.faucet_stats.increaseMetricBy!"faucet_transactions_sent_total"(8);
         }
     }
@@ -444,7 +458,7 @@ public class Faucet : FaucetAPI
             this.setup(config.tx_generator.split_count);
 
         // For now we always send to first client
-        if (this.state.update(this.client, Height(this.state.known + 1)))
+        if (this.state.update(randomClient(), Height(this.state.known + 1)))
             logTrace("State has been updated: %s", this.state.known);
 
         logInfo("About to send transactions...");
@@ -468,7 +482,7 @@ public class Faucet : FaucetAPI
         if (this.state.utxos.storage.length > config.tx_generator.merge_threshold)
         {
             auto tx = this.mergeTx(this.state.utxos.byKeyValue().take(uniform(10, 100, rndGen)));
-            this.client.putTransaction(tx);
+            randomClient().putTransaction(tx);
             logDebug("Transaction sent: %s", tx);
             this.faucet_stats.increaseMetricBy!"faucet_transactions_sent_total"(1);
         }
@@ -478,7 +492,7 @@ public class Faucet : FaucetAPI
                 .take(uniform(1, 10, rndGen));
             foreach (tx; rng)
             {
-                this.client.putTransaction(tx);
+                randomClient().putTransaction(tx);
                 logDebug("Transaction sent: %s", tx);
                 this.faucet_stats.increaseMetricBy!"faucet_transactions_sent_total"(1);
             }
@@ -511,7 +525,7 @@ public class Faucet : FaucetAPI
         {
             Transaction tx = txb.draw(leftover, [pubkey]).sign();
             logInfo("Sending %s BOA to %s", amount.coins, recv);
-            this.client.putTransaction(tx);
+            randomClient().putTransaction(tx);
             this.faucet_stats.increaseMetricBy!"faucet_transactions_sent_total"(1);
         }
         else
@@ -540,7 +554,7 @@ public class Faucet : FaucetAPI
 
             Transaction tx = txb.sign();
             logInfo("Sending %s BOA to %s", amount.coins, recv);
-            this.client.putTransaction(tx);
+            randomClient().putTransaction(tx);
             this.faucet_stats.increaseMetricBy!"faucet_transactions_sent_total"(1);
         }
     }
@@ -643,7 +657,7 @@ int main (string[] args)
         return 1;
     }
 
-    logInfo("We'll be sending transactions to %s", config.tx_generator.addresses[0]);
+    logInfo("We'll be sending transactions to the following clients: %s", config.tx_generator.addresses);
     inst = new Faucet();
     inst.stats_server = new StatsServer(config.tx_generator.stats_port);
 
