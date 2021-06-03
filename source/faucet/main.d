@@ -124,7 +124,7 @@ public struct Builder
     }
 
     /// Forward to `TxBuilder.sign` with a different default unlocker
-    public Transaction sign (in OutputType type = OutputType.Payment, const(ubyte)[] data = [],
+    public Transaction sign (in OutputType type = OutputType.Payment, ubyte[] data = null,
         Height lock_height = Height(0), uint unlock_age = 0) @safe nothrow
     {
         return this.builder.sign(type, data, lock_height, unlock_age, &this.keyUnlocker);
