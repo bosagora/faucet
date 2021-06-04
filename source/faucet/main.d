@@ -93,7 +93,7 @@ private struct TxGenerator
         this.stats_port = stats_port;
     }
 
-    this (Node node) @safe
+    this (Node yaml_node) @safe
     {
         send_interval = yaml_node["send_interval"].as!ulong;
         split_count = yaml_node["split_count"].as!uint;
@@ -119,10 +119,10 @@ private struct Web
         this.port = port;
     }
 
-    this (Node node) @safe
+    this (Node yaml_node) @safe
     {
-        this.address = node["address"].as!string;
-        this.port = node["port"].as!ushort;
+        this.address = yaml_node["address"].as!string;
+        this.port = yaml_node["port"].as!ushort;
     }
 }
 
@@ -701,7 +701,7 @@ private string getStaticFilePath ()
 private string[] parseSequence (string section,
         Node root, bool optional = false)
 {
-    if (auto node = section in root)
+    if (auto yaml_node = section in root)
         enforce(root[section].type == NodeType.sequence,
             format("`%s` section must be a sequence", section));
     else if (optional)
