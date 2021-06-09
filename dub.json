@@ -10,6 +10,7 @@
     "license": "MIT",
 
     "dflags": [ "-i", "-preview=in" ],
+    "dflags-ldc": [ "--link-defaultlib-debug" ],
     "lflags-linux": [ "--export-dynamic" ],
     "lflags-osx": [ "-export_dynamic" ],
     "libs": [ "sqlite3", "sodium" ],
