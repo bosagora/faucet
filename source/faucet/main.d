@@ -52,8 +52,6 @@ import vibe.http.server;
 import vibe.inet.url;
 import vibe.web.rest;
 
-static immutable KeyCount = WK.Keys.byRange().length;
-
 /// The keys that will be used for generating transactions
 private SecretKey[PublicKey] secret_keys;
 
@@ -172,8 +170,8 @@ private struct State
                 from += blocks.length;
             } while (this.known < height);
 
-            assert(this.getOwnedUTXOs().length);
             this.owned_utxos = this.getOwnedUTXOs();
+            assert(this.owned_utxos.length);
 
             return true;
         }
@@ -272,32 +270,34 @@ public class Faucet : FaucetAPI
 
         Splits the Outputs from `utxo_rng` towards `count` random keys
 
-        The keys are continuous in the `WK.Keys.byRange()` range, but the range
-        starts at a random position (no less than `count` before the end).
+        The keys are continuous in an associative array.
+        We take `count` keys starting at a random position
+        (no less than `count` before the end).
 
         Params:
           UR = Range of tuple with an `Output` (`value`) and
                  a `Hash` (`key`), as its first and second element, respectively
-          count = The number of keys to spread the UTXOs to
+          max_count = The number of keys up to the number of available keys
+            to spread the UTXOs to
 
         Returns:
           A range of Transactions
 
     *******************************************************************************/
 
-    private auto splitTx (UR) (UR utxo_rng, uint count)
+    private auto splitTx (UR) (UR utxo_rng, uint max_count)
     {
         static assert (isInputRange!UR);
-        assert(count <= KeyCount);
 
+        auto count = min(max_count, secret_keys.length);
+        assert(count > 0);
         return utxo_rng
             .filter!(tup => tup.value.output.value >= Amount(count))
             .map!(tup => Builder(tup.value.output, tup.key))
             .map!(txb => txb.split(
-                    WK.Keys.byRange()
-                    .drop(uniform(0, KeyCount - count, rndGen))
-                    .take(count)
-                    .map!(k => k.address))
+                    secret_keys.byKey() // AA keys are addresses
+                    .drop(uniform(0, secret_keys.length - count, rndGen))
+                    .take(count))
                 .sign());
     }
 
@@ -319,10 +319,11 @@ public class Faucet : FaucetAPI
     {
         static assert (isInputRange!UR);
 
-        return Builder(WK.Keys[uniform(0, KeyCount, rndGen)].address)
-                            .attach(utxo_rng.map!(utxo => utxo.value.output)
-                            .zip(utxo_rng.map!(utxo => utxo.key)))
-                            .sign();
+        return Builder(secret_keys.byKey() // AA keys are addresses
+            .drop(uniform(0, secret_keys.length, rndGen)).front())
+                .attach(utxo_rng.map!(utxo => utxo.value.output)
+                .zip(utxo_rng.map!(utxo => utxo.key)))
+                .sign();
     }
 
     /*******************************************************************************
@@ -560,6 +561,7 @@ int main (string[] args)
         config.tx_generator.keys.map!(k =>
             KeyPair.fromSeed(SecretKey.fromString(k)))
                 .each!(kp => secret_keys.require(kp.address, kp.secret));
+        logInfo("Loaded %s keys from the file", secret_keys.length);
     }
     logInfo("Configuration: %s", config);
 
