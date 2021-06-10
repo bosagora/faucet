@@ -505,9 +505,9 @@ int main (string[] args)
 
     static void printHelp ()
     {
-        stderr.writeln("Usage: ./faucet -c {'none'|<path>} [<address>]");
-        stderr.writeln("Where <address> is an http endpoint, such as 'http://192.168.0.42:8080'");
-        stderr.writeln("  and path is a config yaml filepath");
+        stderr.writeln("Usage: ./faucet [-c <path>]");
+        stderr.writeln("By default, faucet will attempt to read its configuration from
+                        config.yaml");
     }
 
     if (bind.length) try
@@ -540,29 +540,12 @@ int main (string[] args)
         sigaction(SIGTERM, &siginfo, null);
     }
 
-    if (configPath == "none" || !configPath.exists)
-    {
-        if (args.length == 1)
-        {
-            stderr.writeln("Missing address at which to send transactions");
-            printHelp();
-            return 1;
-        }
-        WK.Keys.byRange().each!(kp => secret_keys.require(kp.address, kp.secret));
-        TxGenerator default_generator = TxGenerator(30, 15, 1000, [args[1]], []);
-        Web default_web = Web("127.0.0.1");
-        config = Config(default_generator, default_web);
-        secret_keys.require(WK.Keys.Genesis.address, WK.Keys.Genesis.secret);
-    }
-    else
-    {
-        logInfo("Loading Configuration from %s", configPath);
-        config = parseConfigFile(configPath);
-        config.tx_generator.keys.map!(k =>
-            KeyPair.fromSeed(SecretKey.fromString(k)))
-                .each!(kp => secret_keys.require(kp.address, kp.secret));
-        logInfo("Loaded %s keys from the file", secret_keys.length);
-    }
+    logInfo("Loading Configuration from %s", configPath);
+    config = parseConfigFile(configPath);
+    config.tx_generator.keys.map!(k =>
+        KeyPair.fromSeed(SecretKey.fromString(k)))
+            .each!(kp => secret_keys.require(kp.address, kp.secret));
+    logInfo("Loaded %s keys from the file", secret_keys.length);
     logInfo("Configuration: %s", config);
 
     if (bind.length) try
