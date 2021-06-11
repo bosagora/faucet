@@ -58,69 +58,6 @@ private SecretKey[PublicKey] secret_keys;
 /// The configuration for faucet as a faucet and a tx generator
 private Config config;
 
-/// Override the symbol 'TxBuilder' and use the Config as a default
-public struct Builder
-{
-    /// Underlying instance
-    TxBuilder builder;
-
-    /// Forward methods
-    alias builder this;
-
-    /// Forward to the underlying TxBuilder constructor
-    public this (in PublicKey refundMe) @safe pure nothrow
-    {
-        this.builder = TxBuilder(refundMe);
-    }
-
-    /// Ditto
-    public this (in Lock lock) @safe pure nothrow
-    {
-        this.builder = TxBuilder(lock);
-    }
-
-    /// Ditto
-    public this (const Transaction tx) @safe nothrow
-    {
-        this.builder = TxBuilder(tx);
-    }
-
-    /// Ditto
-    public this (const Transaction tx, uint index) @safe nothrow
-    {
-        this.builder = TxBuilder(tx, index);
-    }
-
-    /// Ditto
-    public this (const Transaction tx, uint index, in Lock lock) @safe nothrow
-    {
-        this.builder = TxBuilder(tx, index, lock);
-    }
-
-    /// Ditto
-    public this (in Output utxo, in Hash hash) @safe nothrow
-    {
-        this.builder = TxBuilder(utxo, hash);
-    }
-
-    /// Forward to `TxBuilder.sign` with a different default unlocker
-    public Transaction sign (in OutputType type = OutputType.Payment, ubyte[] data = null,
-        Height lock_height = Height(0), uint unlock_age = 0) @safe nothrow
-    {
-        return this.builder.sign(type, data, lock_height, unlock_age, &this.keyUnlocker);
-    }
-
-    ///
-    private Unlock keyUnlocker (in Transaction tx, in OutputRef out_ref) @safe nothrow
-    {
-        auto ownerSecret = secret_keys[out_ref.output.address];
-        assert(ownerSecret !is SecretKey.init,
-                "Address not known: " ~ out_ref.output.address.toString());
-
-        return genKeyUnlock(KeyPair.fromSeed(ownerSecret).sign(tx));
-    }
-}
-
 /// Holds the state of our application and contains update methods
 private struct State
 {
@@ -266,6 +203,16 @@ public class Faucet : FaucetAPI
         return choice(this.clients);
     }
 
+    ///
+    private Unlock keyUnlocker (in Transaction tx, in OutputRef out_ref) @safe nothrow
+    {
+        auto ownerSecret = secret_keys[out_ref.output.address];
+        assert(ownerSecret !is SecretKey.init,
+                "Address not known: " ~ out_ref.output.address.toString());
+
+        return genKeyUnlock(KeyPair.fromSeed(ownerSecret).sign(tx));
+    }
+
     /*******************************************************************************
 
         Splits the Outputs from `utxo_rng` towards `count` random keys
@@ -291,13 +238,13 @@ public class Faucet : FaucetAPI
 
         return utxo_rng
             .filter!(tup => tup.value.output.value >= Amount(count))
-            .map!(tup => Builder(tup.value.output, tup.key))
+            .map!(tup => TxBuilder(tup.value.output, tup.key))
             .map!(txb => txb.split(
                     secret_keys.byKey() // AA keys are addresses
                     .cycle()    // cycle the range of keys as needed
                     .drop(uniform(0, count, rndGen))    // start at some random position
                     .take(count))
-                .sign());
+                .sign(OutputType.Payment, null, Height(0), 0, &this.keyUnlocker));
     }
 
     /*******************************************************************************
@@ -319,10 +266,10 @@ public class Faucet : FaucetAPI
         static assert (isInputRange!UR);
 
         // AA keys are addresses
-        auto builder = Builder(
+        auto builder = TxBuilder(
             secret_keys.byKey().drop(uniform(0, secret_keys.length, rndGen)).front());
         utxo_rng.each!(kv => builder.attach(kv.value.output, kv.key));
-        return builder.sign();
+        return builder.sign(OutputType.Payment, null, Height(0), 0, &this.keyUnlocker);
     }
 
     /*******************************************************************************
@@ -438,11 +385,12 @@ public class Faucet : FaucetAPI
         owned_utxo_rng.popFront();
         assert(first_utxo.value.output.value > Amount(0));
 
-        Builder txb = Builder(first_utxo.value.output, first_utxo.key);
+        TxBuilder txb = TxBuilder(first_utxo.value.output, first_utxo.key);
 
         if (leftover <= first_utxo.value.output.value)
         {
-            Transaction tx = txb.draw(leftover, [pubkey]).sign();
+            Transaction tx = txb.draw(leftover, [pubkey])
+                .sign(OutputType.Payment, null, Height(0), 0, &this.keyUnlocker);
             logInfo("Sending %s BOA to %s", amount.coins, recv);
             this.randomClient().putTransaction(tx);
             this.faucet_stats.increaseMetricBy!"faucet_transactions_sent_total"(1);
@@ -471,7 +419,8 @@ public class Faucet : FaucetAPI
                 leftover.sub(new_utxo.value.output.value);
             }
 
-            Transaction tx = txb.sign();
+            Transaction tx = txb
+                .sign(OutputType.Payment, null, Height(0), 0, &this.keyUnlocker);
             logInfo("Sending %s BOA to %s", amount.coins, recv);
             this.randomClient().putTransaction(tx);
             this.faucet_stats.increaseMetricBy!"faucet_transactions_sent_total"(1);
