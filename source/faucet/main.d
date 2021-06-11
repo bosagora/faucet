@@ -542,11 +542,10 @@ int main (string[] args)
 
     logInfo("Loading Configuration from %s", configPath);
     config = parseConfigFile(configPath);
-    config.tx_generator.keys.map!(k =>
+    config.tx_generator.seeds.keys.map!(k =>
         KeyPair.fromSeed(SecretKey.fromString(k)))
             .each!(kp => secret_keys.require(kp.address, kp.secret));
-    logInfo("Loaded %s keys from the file", secret_keys.length);
-    logInfo("Configuration: %s", config);
+    logInfo("%s", config);
 
     if (bind.length) try
     {
