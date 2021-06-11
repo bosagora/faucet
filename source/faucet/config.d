@@ -37,6 +37,17 @@ public struct Config
     }
 }
 
+public struct Seeds
+{
+    string[] keys;
+
+    /// We do not want to log the key seeds
+    public string toString ()
+    {
+        return format!"%s keys"(keys.length);
+    }
+}
+
 public struct TxGenerator
 {
     /// How frequently we run our periodic task
@@ -52,19 +63,19 @@ public struct TxGenerator
     string[] addresses;
 
     /// Keys from the config
-    string[] keys;
+    Seeds seeds;
 
     /// Stats port (default: 9113)
     ushort stats_port;
 
     this (ulong send_interval, uint split_count, uint merge_threshold,
-        string[] addresses, string[] keys, ushort stats_port = 9113)
+        string[] addresses, Seeds seeds, ushort stats_port = 9113)
     {
         this.send_interval = send_interval;
         this.split_count = split_count;
         this.merge_threshold = merge_threshold;
         this.addresses = addresses;
-        this.keys = keys;
+        this.seeds = seeds;
         this.stats_port = stats_port;
     }
 
@@ -74,7 +85,7 @@ public struct TxGenerator
         split_count = yaml_node["split_count"].as!uint;
         merge_threshold = yaml_node["merge_threshold"].as!uint;
         () @trusted { addresses = parseSequence("addresses", yaml_node, true); }();
-        () @trusted { keys = parseSequence("keys", yaml_node, false); }();
+        () @trusted { seeds.keys = parseSequence("keys", yaml_node, false); }();
         stats_port = yaml_node["stats_port"].as!ushort;
     }
 }
