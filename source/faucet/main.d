@@ -277,26 +277,25 @@ public class Faucet : FaucetAPI
         Params:
           UR = Range of tuple with an `Output` (`value`) and
                  a `Hash` (`key`), as its first and second element, respectively
-          max_count = The number of keys up to the number of available keys
-            to spread the UTXOs to
+          count = The number of keys up to the number of available keys
+            to spread the UTXOs to which will wrap around the keys if required
 
         Returns:
           A range of Transactions
 
     *******************************************************************************/
 
-    private auto splitTx (UR) (UR utxo_rng, uint max_count)
+    private auto splitTx (UR) (UR utxo_rng, uint count)
     {
         static assert (isInputRange!UR);
 
-        auto count = min(max_count, secret_keys.length);
-        assert(count > 0);
         return utxo_rng
             .filter!(tup => tup.value.output.value >= Amount(count))
             .map!(tup => Builder(tup.value.output, tup.key))
             .map!(txb => txb.split(
                     secret_keys.byKey() // AA keys are addresses
-                    .drop(uniform(0, secret_keys.length - count, rndGen))
+                    .cycle()    // cycle the range of keys as needed
+                    .drop(uniform(0, count, rndGen))    // start at some random position
                     .take(count))
                 .sign());
     }
