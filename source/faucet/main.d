@@ -318,11 +318,11 @@ public class Faucet : FaucetAPI
     {
         static assert (isInputRange!UR);
 
-        return Builder(secret_keys.byKey() // AA keys are addresses
-            .drop(uniform(0, secret_keys.length, rndGen)).front())
-                .attach(utxo_rng.map!(utxo => utxo.value.output)
-                .zip(utxo_rng.map!(utxo => utxo.key)))
-                .sign();
+        // AA keys are addresses
+        auto builder = Builder(
+            secret_keys.byKey().drop(uniform(0, secret_keys.length, rndGen)).front());
+        utxo_rng.each!(kv => builder.attach(kv.value.output, kv.key));
+        return builder.sign();
     }
 
     /*******************************************************************************
