@@ -297,7 +297,7 @@ public class Faucet : FaucetAPI
         if (utxo_len < 200)
         {
             assert(utxo_len >= 8);
-            this.splitTx(this.state.utxos.storage.byKeyValue(), 100)
+            this.splitTx(this.state.utxos.storage.byKeyValue(), count)
                 .take(8)
                 .each!(tx => this.randomClient().putTransaction(tx));
             this.faucet_stats.increaseMetricBy!"faucet_transactions_sent_total"(8);
