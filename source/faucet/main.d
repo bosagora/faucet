@@ -268,7 +268,7 @@ public class Faucet : FaucetAPI
         // AA keys are addresses
         auto builder = TxBuilder(
             secret_keys.byKey().drop(uniform(0, secret_keys.length, rndGen)).front());
-        utxo_rng.each!(kv => builder.attach(kv.value.output, kv.key));
+        builder.attach(utxo_rng);
         return builder.sign(OutputType.Payment, 0, &this.keyUnlocker);
     }
 
@@ -347,7 +347,9 @@ public class Faucet : FaucetAPI
 
         if (this.state.utxos.storage.length > config.tx_generator.merge_threshold)
         {
-            auto tx = this.mergeTx(this.state.utxos.byKeyValue().take(uniform(10, 100, rndGen)));
+            auto tx = this.mergeTx(this.state.utxos.byKeyValue()
+                .map!(kv => tuple(kv.value.output, kv.key))
+                .take(uniform(10, 100, rndGen)));
             this.randomClient().putTransaction(tx);
             logDebug("Transaction sent: %s", tx);
             this.faucet_stats.increaseMetricBy!"faucet_transactions_sent_total"(1);
