@@ -291,13 +291,13 @@ public class Faucet : FaucetAPI
         while (!this.state.update(randomClient(), Height(0)))
             sleep(5.seconds);
 
-        const utxo_len = this.state.utxos.storage.length;
+        const utxo_len = this.state.owned_utxos.length;
 
         logInfo("Setting up: height=%s, %s UTXOs found", this.state.known, utxo_len);
         if (utxo_len < 200)
         {
             assert(utxo_len >= 8);
-            this.splitTx(this.state.utxos.storage.byKeyValue(), count)
+            this.splitTx(this.state.owned_utxos.byKeyValue(), count)
                 .take(8)
                 .each!(tx => this.randomClient().putTransaction(tx));
             this.faucet_stats.increaseMetricBy!"faucet_transactions_sent_total"(8);
@@ -347,7 +347,7 @@ public class Faucet : FaucetAPI
 
         if (this.state.utxos.storage.length > config.tx_generator.merge_threshold)
         {
-            auto tx = this.mergeTx(this.state.utxos.byKeyValue()
+            auto tx = this.mergeTx(this.state.owned_utxos.byKeyValue()
                 .map!(kv => tuple(kv.value.output, kv.key))
                 .take(uniform(10, 100, rndGen)));
             this.randomClient().putTransaction(tx);
@@ -356,7 +356,7 @@ public class Faucet : FaucetAPI
         }
         else
         {
-            auto rng = this.splitTx(this.state.utxos.byKeyValue(), config.tx_generator.split_count)
+            auto rng = this.splitTx(this.state.owned_utxos.byKeyValue(), config.tx_generator.split_count)
                 .take(uniform(1, 10, rndGen));
             foreach (tx; rng)
             {
