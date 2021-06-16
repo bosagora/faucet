@@ -13,7 +13,12 @@
     "dflags-ldc": [ "--link-defaultlib-debug" ],
     "lflags-linux": [ "--export-dynamic" ],
     "lflags-osx": [ "-export_dynamic" ],
-    "libs": [ "sqlite3", "sodium" ],
+    "libs": [ "sqlite3", "sodium", "openssl" ],
+
+    "versions":
+    [
+        "Have_openssl",
+    ],
 
     "configurations": [
         {
@@ -62,5 +67,6 @@
         "submodules/vibe.d/tls/",
         "submodules/vibe.d/utils/",
         "submodules/vibe.d/web/",
+        "submodules/openssl/",
     ]
 }
