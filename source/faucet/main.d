@@ -374,9 +374,10 @@ public class Faucet : FaucetAPI
     }
 
     /// POST: /send_transaction
-    public override void sendTransaction (string recv, ulong amount)
+    public override void sendTransaction (string recv)
     {
         PublicKey pubkey = PublicKey.fromString(recv);
+        ulong amount = 100;
         Amount leftover = amount.coins;
         auto owned_utxo_rng = this.state.owned_utxos.byKeyValue()
             // do not pick already used UTXOs
@@ -393,7 +394,7 @@ public class Faucet : FaucetAPI
         {
             Transaction tx = txb.draw(leftover, [pubkey])
                 .sign(OutputType.Payment, 0, &this.keyUnlocker);
-            logInfo("Sending %s BOA to %s", amount.coins, recv);
+            logInfo("Sending %s BOA to %s", amount, recv);
             this.randomClient().putTransaction(tx);
             this.faucet_stats.increaseMetricBy!"faucet_transactions_sent_total"(1);
         }
@@ -423,7 +424,7 @@ public class Faucet : FaucetAPI
 
             Transaction tx = txb
                 .sign(OutputType.Payment, 0, &this.keyUnlocker);
-            logInfo("Sending %s BOA to %s", amount.coins, recv);
+            logInfo("Sending %s BOA to %s", amount, recv);
             this.randomClient().putTransaction(tx);
             this.faucet_stats.increaseMetricBy!"faucet_transactions_sent_total"(1);
         }
