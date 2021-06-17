@@ -27,7 +27,7 @@ import vibe.http.common;
 
     The faucet can:
     - Return an array of all UTXOs known
-    - Send `Amount` BOA to `KEY`, using owned UTXOs
+    - Send 100 BOA to `KEY`, using owned UTXOs
     - Make `Transaction`s
 
 *******************************************************************************/
@@ -53,17 +53,16 @@ public interface FaucetAPI
 
     /***************************************************************************
 
-        Send `amount` BOA to `KEY`, using owned UTXOs
+        Send 100 BOA to `KEY`, using owned UTXOs
 
         API:
           POST /send
 
         Params:
           recv = the destination key
-          amount = amount of BOA
 
     ***************************************************************************/
 
     @path("/send")
-    public void sendTransaction (@viaQuery("recv") string recv, @viaQuery("amount") ulong amount);
+    public void sendTransaction (@viaQuery("recv") string recv);
 }
