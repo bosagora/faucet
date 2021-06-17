@@ -504,7 +504,8 @@ int main (string[] args)
     setLogLevel(verbose ? LogLevel.trace : LogLevel.info);
 
     inst.sendTx = setTimer(config.tx_generator.send_interval.seconds, () => inst.send(), true);
-    inst.webInterface = bind.length ? startListeningInterface(config, inst) : HTTPListener.init;
+    if (config.web.address.length)
+        inst.webInterface = startListeningInterface(config, inst);
     return runEventLoop();
 }
 
