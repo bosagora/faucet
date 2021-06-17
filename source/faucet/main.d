@@ -497,19 +497,6 @@ int main (string[] args)
             .each!(kp => secret_keys.require(kp.address, kp.secret));
     logInfo("%s", config);
 
-    if (bind.length) try
-    {
-        auto bindurl = URL(bind);
-        string address = bindurl.host;
-        uint port = bindurl.port;
-    }
-    catch (Exception exc)
-    {
-        stderr.writeln("Could not parse '", bind, "' as a valid URL");
-        stderr.writeln("Make sure the address contains a scheme, e.g. 'http://127.0.0.1:2766'");
-        return 1;
-    }
-
     logInfo("We'll be sending transactions to the following clients: %s", config.tx_generator.addresses);
     inst = new Faucet();
     inst.stats_server = new StatsServer(config.tx_generator.stats_port);
