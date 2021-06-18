@@ -532,6 +532,9 @@ private string getStaticFilePath ()
     if (std.file.exists("frontend/index.html"))
         return std.file.getcwd() ~ "/frontend/";
 
+    if (std.file.exists("/usr/share/faucet/frontend/index.html"))
+        return "/usr/share/faucet/frontend/";
+
     throw new Exception("Files not found. " ~
                         "This might mean your faucet is not installed correctly. " ~
                         "Searched for `index.html` in '" ~ std.file.getcwd() ~
