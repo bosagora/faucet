@@ -373,7 +373,7 @@ public class Faucet : FaucetAPI
         return this.state.utxos.storage;
     }
 
-    /// POST: /send_transaction
+    /// POST: /send
     public override void sendTransaction (string recv)
     {
         PublicKey pubkey = PublicKey.fromString(recv);
