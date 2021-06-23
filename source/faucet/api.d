@@ -64,5 +64,5 @@ public interface FaucetAPI
     ***************************************************************************/
 
     @path("/send")
-    public void sendTransaction (@viaQuery("recv") string recv);
+    public void sendTransaction (@viaBody("recv") string recv);
 }
