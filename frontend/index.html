@@ -31,6 +31,13 @@
             <br>
               <input id="submitform" class="w-90 btn btn-lg btn-primary" type="submit" value="Send test BOA to address">
         </form>
+      <br>
+        <div id="valid" class="result" style="display: none;">
+          <p>Test BOA successfully sent!</p>
+        </div>
+        <div id="invalid" class="result" style="display: none;">
+          <p>Invalid address!</p>
+        </div>
     </main>
   </body>
   <script>
@@ -46,6 +53,14 @@
           contentType : "application/json",
           type : "POST",
           data : result,
+          success : function(data)
+          {
+            $('#valid').fadeIn(250).fadeOut(5000);
+          },
+          error : function()
+          {
+            $('#invalid').fadeIn(250).fadeOut(5000);
+          },
         });
       });
     });

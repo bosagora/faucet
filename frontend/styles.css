@@ -41,3 +41,19 @@ body {
   border-bottom-right-radius: 0;
   border-bottom-left-radius: 0;
 }
+
+.result {
+  border-radius: 5px;
+  padding-top: 5px;
+  padding-bottom: 5px;
+}
+
+#valid {
+  background: #d5f5e3;
+  color: #196f3d;
+}
+
+#invalid {
+  background: #ffccd9;
+  color: #ff3333;
+}
