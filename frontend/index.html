@@ -36,7 +36,7 @@
           <p>Test BOA successfully sent!</p>
         </div>
         <div id="invalid" class="result" style="display: none;">
-          <p>Invalid address!</p>
+          <p>Error message</p>
         </div>
     </main>
   </body>
@@ -46,21 +46,27 @@
       $("#submitform").click(function(e)
       {
         e.preventDefault(); // STOP default action
-        var result = JSON.stringify({recv : $("#recv").val()});
+        $('#valid').fadeOut(10);
+        $('#invalid').fadeOut(10);
+        var address = JSON.stringify({recv : $("#recv").val()});
         $.ajax(
         {
           url : "send",
           contentType : "application/json",
           type : "POST",
-          data : result,
-          success : function(data)
-          {
-            $('#valid').fadeIn(250).fadeOut(5000);
-          },
-          error : function()
-          {
-            $('#invalid').fadeIn(250).fadeOut(5000);
-          },
+          data : address
+        }).done(function(data) {
+            $('#valid').fadeIn(250);
+        }).fail(function(data) {
+            var failReason;
+            try {
+                failReason = data['responseJSON']['statusMessage'];
+            }
+            catch (e) {
+                console.log(e);
+                failReason = "Faucet currently unavailable. Please try later.";
+            }
+            $('#invalid').text(failReason).fadeIn(250);
         });
       });
     });
