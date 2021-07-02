@@ -41,11 +41,16 @@
     </main>
   </body>
   <script>
-    $(document).ready(function()
-    {
-      $("#submitform").click(function(e)
-      {
+    $(document).ready(function() {
+        $('#submitform').prop('disabled', true);
+        $('#recv').keyup(function() {
+            if($(this).val() != '') {
+            $('#submitform').prop('disabled', false);
+            }
+        });
+      $("#submitform").click(function(e) {
         e.preventDefault(); // STOP default action
+        $('#submitform').prop('disabled', true);
         $('#valid').fadeOut(10);
         $('#invalid').fadeOut(10);
         var address = JSON.stringify({recv : $("#recv").val()});
