@@ -382,6 +382,14 @@ public class Faucet : FaucetAPI
         auto owned_utxo_rng = this.state.owned_utxos.byKeyValue()
             // do not pick already used UTXOs
             .filter!(pair => pair.key !in this.used_utxos);
+
+        auto owned_utxo_len = owned_utxo_rng.take(2).count;
+        if (owned_utxo_len <= 1)
+        {
+            logError("Insufficient UTXOs in storage. # of UTXOs: %s", owned_utxo_len);
+            throw new Exception(format("Insufficient UTXOs in storage. # of UTXOs: %s", owned_utxo_len));
+        }
+
         auto first_utxo = owned_utxo_rng.front;
         // add used UTXO to to used_utxos
         this.used_utxos[first_utxo.key] = first_utxo.value;
