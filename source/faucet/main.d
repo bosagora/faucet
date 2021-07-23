@@ -377,6 +377,7 @@ public class Faucet : FaucetAPI
     public override void sendTransaction (string recv)
     {
         PublicKey pubkey = PublicKey.fromString(recv);
+        ulong fee_per_byte = uniform(config.min_fee_per_byte, config.max_fee_per_byte, rndGen);
         ulong amount = 100;
         Amount leftover = amount.coins;
         auto owned_utxo_rng = this.state.owned_utxos.byKeyValue()
@@ -396,19 +397,25 @@ public class Faucet : FaucetAPI
         owned_utxo_rng.popFront();
         assert(first_utxo.value.output.value > Amount(0));
 
-        TxBuilder txb = TxBuilder(first_utxo.value.output, first_utxo.key);
+        Transaction tx = TxBuilder(first_utxo.value.output, first_utxo.key)
+                            .sign(OutputType.Payment, 0, &this.keyUnlocker);
 
-        if (leftover <= first_utxo.value.output.value)
+        Amount tx_fee = Amount(fee_per_byte * tx.sizeInBytes());
+
+        if (leftover.mustAdd(tx_fee) <= first_utxo.value.output.value)
         {
-            Transaction tx = txb.draw(leftover, [pubkey])
-                .sign(OutputType.Payment, 0, &this.keyUnlocker);
+            leftover.mustSub(tx_fee);
+            Transaction final_tx = TxBuilder(tx)
+                                    .draw(leftover, [pubkey])
+                                    .deduct(tx_fee)
+                                    .sign(OutputType.Payment, 0, &this.keyUnlocker);
             logInfo("Sending %s BOA to %s", amount, recv);
-            this.randomClient().putTransaction(tx);
+            this.randomClient().putTransaction(final_tx);
             this.faucet_stats.increaseMetricBy!"faucet_transactions_sent_total"(1);
         }
         else
         {
-            txb.draw(first_utxo.value.output.value, [pubkey]);
+            TxBuilder txb = TxBuilder(tx).draw(first_utxo.value.output.value, [pubkey]);
             leftover.sub(first_utxo.value.output.value);
 
             while (leftover > Amount(0))
@@ -418,10 +425,12 @@ public class Faucet : FaucetAPI
                 owned_utxo_rng.popFront();
                 assert(new_utxo.value.output.value > Amount(0));
 
-                if (leftover <= new_utxo.value.output.value)
+                if (leftover.mustAdd(tx_fee) <= new_utxo.value.output.value)
                 {
+                    leftover.mustSub(tx_fee);
                     txb.attach(new_utxo.value.output, new_utxo.key)
-                       .draw(leftover, [pubkey]);
+                       .draw(leftover, [pubkey])
+                       .deduct(tx_fee);
                     break;
                 }
 
@@ -430,10 +439,10 @@ public class Faucet : FaucetAPI
                 leftover.sub(new_utxo.value.output.value);
             }
 
-            Transaction tx = txb
+            Transaction final_tx2 = txb
                 .sign(OutputType.Payment, 0, &this.keyUnlocker);
             logInfo("Sending %s BOA to %s", amount, recv);
-            this.randomClient().putTransaction(tx);
+            this.randomClient().putTransaction(final_tx2);
             this.faucet_stats.increaseMetricBy!"faucet_transactions_sent_total"(1);
         }
     }

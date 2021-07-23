@@ -30,6 +30,12 @@ public struct Config
     /// config for faucet web
     Web web;
 
+    /// lower threshold of the fee per byte
+    ulong min_fee_per_byte = 700;
+
+    /// upper threshold of the fee per byte
+    ulong max_fee_per_byte = 1000;
+
     this (TxGenerator tx_generator, Web web)
     {
         this.tx_generator = tx_generator;
