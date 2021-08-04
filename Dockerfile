@@ -1,5 +1,5 @@
 # Build from source
-FROM bpfk/agora-builder:latest AS Builder
+FROM bosagora/agora-builder:latest AS Builder
 ARG AGORA_VERSION="HEAD"
 WORKDIR /root/faucet/
 ADD . /root/faucet/
