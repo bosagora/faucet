@@ -10,4 +10,4 @@ This involves a broad array of use cases:
 - As the name suggest, it can also be used as a faucet for TestNet;
 - As a stress-test tool targeting specific attack;
 
-Faucet is available [on the docker registry](https://hub.docker.com/r/bpfk/faucet).
+Faucet is available [on the docker registry](https://hub.docker.com/r/bosagora/faucet).
