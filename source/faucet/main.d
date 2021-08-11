@@ -26,6 +26,7 @@ import agora.consensus.data.genesis.Test;
 import agora.consensus.data.Transaction;
 import agora.consensus.state.UTXOSet;
 import agora.crypto.Key;
+import agora.script.Signature;
 import agora.serialization.Serializer;
 import agora.stats.Server;
 import agora.stats.Utils;
@@ -210,7 +211,7 @@ public class Faucet : FaucetAPI
         assert(ownerSecret !is SecretKey.init,
                 "Address not known: " ~ out_ref.output.address.toString());
 
-        return genKeyUnlock(KeyPair.fromSeed(ownerSecret).sign(tx));
+        return genKeyUnlock(KeyPair.fromSeed(ownerSecret).sign(tx.getChallenge()));
     }
 
     /*******************************************************************************
