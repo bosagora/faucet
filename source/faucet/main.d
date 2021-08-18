@@ -209,7 +209,7 @@ public class Faucet : FaucetAPI
     }
 
     ///
-    private Unlock keyUnlocker (in Transaction tx, in OutputRef out_ref) @safe nothrow
+    private static Unlock keyUnlocker (in Transaction tx, in OutputRef out_ref) @safe nothrow
     {
         auto ownerSecret = secret_keys[out_ref.output.address];
         assert(ownerSecret !is SecretKey.init,
@@ -244,12 +244,12 @@ public class Faucet : FaucetAPI
         return utxo_rng
             .filter!(tup => tup.value.output.value >= minInputValuePerOutput * count)
             .map!(tup => TxBuilder(tup.value.output, tup.key))
-            .map!(txb => txb.split(
+            .map!(txb => txb.unlockSigner(&this.keyUnlocker).split(
                     secret_keys.byKey() // AA keys are addresses
                     .cycle()    // cycle the range of keys as needed
                     .drop(uniform(0, count, rndGen))    // start at some random position
                     .take(count))
-                .sign(OutputType.Payment, 0, &this.keyUnlocker));
+                .sign());
     }
 
     /*******************************************************************************
@@ -274,7 +274,7 @@ public class Faucet : FaucetAPI
         auto builder = TxBuilder(
             secret_keys.byKey().drop(uniform(0, secret_keys.length, rndGen)).front());
         builder.attach(utxo_rng);
-        return builder.sign(OutputType.Payment, 0, &this.keyUnlocker);
+        return builder.unlockSigner(&this.keyUnlocker).sign();
     }
 
     /*******************************************************************************
@@ -411,8 +411,9 @@ public class Faucet : FaucetAPI
 
         if (leftover <= first_utxo.value.output.value)
         {
-            Transaction tx = txb.draw(leftover, [pubkey])
-                .sign(OutputType.Payment, 0, &this.keyUnlocker);
+            Transaction tx = txb.unlockSigner(&this.keyUnlocker)
+                .draw(leftover, [pubkey])
+                .sign();
             logInfo("Sending %s BOA to %s", amount, recv);
             this.randomClient().putTransaction(tx);
             this.faucet_stats.increaseMetricBy!"faucet_transactions_sent_total"(1);
@@ -441,8 +442,7 @@ public class Faucet : FaucetAPI
                 leftover.sub(new_utxo.value.output.value);
             }
 
-            Transaction tx = txb
-                .sign(OutputType.Payment, 0, &this.keyUnlocker);
+            Transaction tx = txb.unlockSigner(&this.keyUnlocker).sign();
             logInfo("Sending %s BOA to %s", amount, recv);
             this.randomClient().putTransaction(tx);
             this.faucet_stats.increaseMetricBy!"faucet_transactions_sent_total"(1);
