@@ -147,6 +147,10 @@ public class Faucet : FaucetAPI
     /// A client object implementing `API`
     private API[] clients;
 
+    /// Minimum input value per output
+    /// This is to prevent transactions with too little input value to cover the fees.
+    private const minInputValuePerOutput = Amount(5_000_000);
+
     /// Timer on which transactions are generated and send
     public Timer sendTx;
 
@@ -238,7 +242,7 @@ public class Faucet : FaucetAPI
         static assert (isInputRange!UR);
 
         return utxo_rng
-            .filter!(tup => tup.value.output.value >= Amount(count))
+            .filter!(tup => tup.value.output.value >= minInputValuePerOutput * count)
             .map!(tup => TxBuilder(tup.value.output, tup.key))
             .map!(txb => txb.split(
                     secret_keys.byKey() // AA keys are addresses
@@ -354,6 +358,7 @@ public class Faucet : FaucetAPI
         if (this.state.utxos.storage.length > config.tx_generator.merge_threshold)
         {
             auto tx = this.mergeTx(this.state.owned_utxos.byKeyValue()
+                .filter!(tup => tup.value.output.value >= minInputValuePerOutput)
                 .map!(kv => tuple(kv.value.output, kv.key))
                 .take(uniform(10, 100, rndGen)));
             this.randomClient().putTransaction(tx);
