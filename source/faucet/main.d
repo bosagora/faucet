@@ -343,13 +343,7 @@ public class Faucet : FaucetAPI
 
         immutable median = sutxo[size / 2].output.value;
         // Should be 500M (5,000,000,000,000,000) for the time being
-        immutable sum = sutxo.map!(utxo => utxo.output.value)
-            .fold!((a, b) {
-                    Amount result = a;
-                    if (!a.add(b))
-                        throw new Exception("Internal error while summing UTXOs");
-                    return result;
-                })(Amount(0));
+        immutable sum = sutxo.map!(utxo => utxo.output.value).sum();
         auto mean = Amount(sum); mean.div(size);
 
         logInfo("\tMedian: %s, Avg: %s", median, mean);
