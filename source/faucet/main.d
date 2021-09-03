@@ -304,7 +304,7 @@ public class Faucet : FaucetAPI
             assert(utxo_len >= 8);
             this.splitTx(this.state.owned_utxos.byKeyValue(), count)
                 .take(8)
-                .each!(tx => this.randomClient().putTransaction(tx));
+                .each!(tx => this.randomClient().postTransaction(tx));
             this.faucet_stats.increaseMetricBy!"faucet_transactions_sent_total"(8);
         }
     }
@@ -355,7 +355,7 @@ public class Faucet : FaucetAPI
                 .filter!(tup => tup.value.output.value >= minInputValuePerOutput)
                 .map!(kv => tuple(kv.value.output, kv.key))
                 .take(uniform(10, 100, rndGen)));
-            this.randomClient().putTransaction(tx);
+            this.randomClient().postTransaction(tx);
             logDebug("Transaction sent: %s", tx);
             this.faucet_stats.increaseMetricBy!"faucet_transactions_sent_total"(1);
         }
@@ -365,7 +365,7 @@ public class Faucet : FaucetAPI
                 .take(uniform(1, 10, rndGen));
             foreach (tx; rng)
             {
-                this.randomClient().putTransaction(tx);
+                this.randomClient().postTransaction(tx);
                 logDebug("Transaction sent: %s", tx);
                 this.faucet_stats.increaseMetricBy!"faucet_transactions_sent_total"(1);
             }
@@ -409,7 +409,7 @@ public class Faucet : FaucetAPI
                 .draw(leftover, [pubkey])
                 .sign();
             logInfo("Sending %s BOA to %s", amount, recv);
-            this.randomClient().putTransaction(tx);
+            this.randomClient().postTransaction(tx);
             this.faucet_stats.increaseMetricBy!"faucet_transactions_sent_total"(1);
         }
         else
@@ -438,7 +438,7 @@ public class Faucet : FaucetAPI
 
             Transaction tx = txb.unlockSigner(&this.keyUnlocker).sign();
             logInfo("Sending %s BOA to %s", amount, recv);
-            this.randomClient().putTransaction(tx);
+            this.randomClient().postTransaction(tx);
             this.faucet_stats.increaseMetricBy!"faucet_transactions_sent_total"(1);
         }
     }
