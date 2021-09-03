@@ -25,10 +25,10 @@ import std.format;
 public struct Config
 {
     /// configuration for tx generator
-    TxGenerator tx_generator;
+    public TxGenerator tx_generator;
 
     /// config for faucet web
-    Web web;
+    public Web web;
 
     this (TxGenerator tx_generator, Web web)
     {
@@ -37,9 +37,10 @@ public struct Config
     }
 }
 
+///
 public struct Seeds
 {
-    string[] keys;
+    public string[] keys;
 
     /// We do not want to log the key seeds
     public string toString ()
@@ -48,27 +49,29 @@ public struct Seeds
     }
 }
 
+///
 public struct TxGenerator
 {
     /// How frequently we run our periodic task
-    ulong send_interval;
+    public ulong send_interval;
 
     /// Between how many addresses we split a transaction by
-    uint split_count;
+    public uint split_count;
 
     /// Maximum number of utxo before merging instead of splitting
-    uint merge_threshold;
+    public uint merge_threshold;
 
     /// Addresses to send the transactions to
-    string[] addresses;
+    public string[] addresses;
 
     /// Keys from the config
-    Seeds seeds;
+    public Seeds seeds;
 
     /// Stats port (default: 9113)
-    ushort stats_port;
+    public ushort stats_port;
 
-    this (ulong send_interval, uint split_count, uint merge_threshold,
+    ///
+    public this (ulong send_interval, uint split_count, uint merge_threshold,
         string[] addresses, Seeds seeds, ushort stats_port = 9113)
     {
         this.send_interval = send_interval;
@@ -79,7 +82,8 @@ public struct TxGenerator
         this.stats_port = stats_port;
     }
 
-    this (Node yaml_node) @safe
+    ///
+    public this (Node yaml_node) @safe
     {
         send_interval = yaml_node["send_interval"].as!ulong;
         split_count = yaml_node["split_count"].as!uint;
@@ -94,18 +98,20 @@ public struct TxGenerator
 public struct Web
 {
     /// Address to bind for website
-    string address;
+    public string address;
 
     /// Port to bind for website
-    ushort port;
+    public ushort port;
 
-    this (string address, ushort port = 2766)
+    ///
+    public this (string address, ushort port = 2766)
     {
         this.address = address;
         this.port = port;
     }
 
-    this (Node yaml_node) @safe
+    ///
+    public this (Node yaml_node) @safe
     {
         this.address = yaml_node["address"].as!string;
         this.port = yaml_node["port"].as!ushort;
