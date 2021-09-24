@@ -45,7 +45,7 @@
         "submodules/agora/source/",
         "submodules/base32/src/",
         "submodules/bitblob/source/",
-        "submodules/config/",
+        "submodules/config/source/",
         "submodules/crypto/source/",
         "submodules/d2sqlite3/source/",
         "submodules/diet-ng/source/",
