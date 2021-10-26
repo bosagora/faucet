@@ -21,6 +21,7 @@ import faucet.stats;
 
 import agora.api.FullNode;
 import agora.common.Amount;
+import agora.common.Set;
 import agora.common.Types;
 import agora.consensus.data.genesis.Test;
 import agora.consensus.data.Transaction;
@@ -68,6 +69,9 @@ private struct State
     private UTXO[Hash] owned_utxos;
     /// The most up-to-date block we know about
     private Height known;
+
+    /// A storage to keep track of UTXOs sent in txs
+    private Set!Hash sent_utxos;
 
     /// Get UTXOs owned by us
     private UTXO[Hash] getOwnedUTXOs () nothrow @safe
@@ -243,7 +247,11 @@ public class Faucet : FaucetAPI
 
         return utxo_rng
             .filter!(tup => tup.value.output.value >= minInputValuePerOutput * count)
-            .map!(tup => TxBuilder(tup.value.output, tup.key))
+            .map!((kv)
+            {
+                this.state.sent_utxos.put(kv.key);
+                return TxBuilder(kv.value.output, kv.key);
+            })
             .map!(txb => txb.unlockSigner(&this.keyUnlocker).split(
                     secret_keys.byKey() // AA keys are addresses
                     .cycle()    // cycle the range of keys as needed
@@ -351,22 +359,36 @@ public class Faucet : FaucetAPI
 
         if (this.state.utxos.storage.length > config.tx_generator.merge_threshold)
         {
-            auto tx = this.mergeTx(this.state.owned_utxos.byKeyValue()
-                .filter!(tup => tup.value.output.value >= minInputValuePerOutput)
-                .map!(kv => tuple(kv.value.output, kv.key))
-                .take(uniform(10, 100, rndGen)));
-            this.randomClient().postTransaction(tx);
-            logDebug("Transaction sent: %s", tx);
-            this.faucet_stats.increaseMetricBy!"faucet_transactions_sent_total"(1);
+            auto utxo_rng = this.state.owned_utxos.byKeyValue()
+                .filter!(kv => kv.key !in this.state.sent_utxos)
+                .filter!(kv => kv.value.output.value >= minInputValuePerOutput)
+                .take(uniform(10, 100, rndGen));
+            if (utxo_rng.empty)
+                logInfo("Waiting for unspent utxo");
+            else
+            {
+                auto tx = this.mergeTx(
+                    utxo_rng.map!((kv)
+                    {
+                        this.state.sent_utxos.put(kv.key);
+                        return tuple(kv.value.output, kv.key);
+                    }));
+                this.randomClient().postTransaction(tx);
+                logDebug("Transaction sent (merge): %s", tx);
+                this.faucet_stats.increaseMetricBy!"faucet_transactions_sent_total"(1);
+            }
         }
         else
         {
-            auto rng = this.splitTx(this.state.owned_utxos.byKeyValue(), config.tx_generator.split_count)
+            auto rng = this.splitTx(
+                    this.state.owned_utxos.byKeyValue()
+                        .filter!(kv => kv.key !in this.state.sent_utxos),
+                    config.tx_generator.split_count)
                 .take(uniform(1, 10, rndGen));
             foreach (tx; rng)
             {
                 this.randomClient().postTransaction(tx);
-                logDebug("Transaction sent: %s", tx);
+                logDebug("Transaction sent (split): %s", tx);
                 this.faucet_stats.increaseMetricBy!"faucet_transactions_sent_total"(1);
             }
         }
