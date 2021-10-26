@@ -98,7 +98,7 @@ private struct State
 
                 foreach (ref b; blocks)
                     foreach (ref tx; b.txs)
-                        if (tx.isPayment)
+                        if (!tx.isCoinbase)
                             this.utxos.updateUTXOCache(tx, b.header.height, PublicKey.init);
 
                 // Use signed arithmetic to avoid negative values wrapping around
