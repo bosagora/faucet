@@ -309,11 +309,14 @@ public class Faucet : FaucetAPI
         logInfo("Setting up: height=%s, %s UTXOs found", this.state.known, utxo_len);
         if (utxo_len < 200)
         {
-            assert(utxo_len >= 8);
+            assert(utxo_len >= 1);
             this.splitTx(this.state.owned_utxos.byKeyValue(), count)
                 .take(8)
-                .each!(tx => this.randomClient().postTransaction(tx));
-            this.faucet_stats.increaseMetricBy!"faucet_transactions_sent_total"(8);
+                .each!((tx)
+                {
+                    this.randomClient().postTransaction(tx);
+                    this.faucet_stats.increaseMetricBy!"faucet_transactions_sent_total"(1);
+                });
         }
     }
 
