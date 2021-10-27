@@ -73,11 +73,12 @@ private struct State
     /// A storage to keep track of UTXOs sent in txs
     private Set!Hash sent_utxos;
 
-    /// Get UTXOs owned by us
+    /// Get UTXOs owned by us that are spendable
     private UTXO[Hash] getOwnedUTXOs () nothrow @safe
     {
         return this.utxos.storage.byKeyValue()
                    .filter!(tup => tup.value.output.address in secret_keys)
+                   .filter!(tup => tup.value.output.type == OutputType.Payment)
                    .map!(kv => tuple(kv.key, kv.value))
                    .assocArray();
     }
