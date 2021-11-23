@@ -340,7 +340,6 @@ public class Faucet : FaucetAPI
         if (this.state.utxos.storage.length == 0)
             this.setup(config.tx_generator.split_count);
 
-        // For now we always send to first client
         if (this.state.update(randomClient(), Height(this.state.known + 1)))
             logTrace("State has been updated: %s", this.state.known);
 
