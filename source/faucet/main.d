@@ -103,8 +103,7 @@ private struct State
 
                 foreach (ref b; blocks)
                     foreach (ref tx; b.txs)
-                        if (!tx.isCoinbase)
-                            this.utxos.updateUTXOCache(tx, b.header.height, WK.Keys.CommonsBudget.address);
+                        this.utxos.updateUTXOCache(tx, b.header.height, WK.Keys.CommonsBudget.address);
 
                 // Use signed arithmetic to avoid negative values wrapping around
                 const long delta = (cast(long) this.utxos.storage.length) - current_len;
