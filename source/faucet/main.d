@@ -341,7 +341,14 @@ public class Faucet : FaucetAPI
             this.setup(config.tx_generator.split_count);
 
         if (this.state.update(randomClient(), Height(this.state.known + 1)))
+        {
+            // If we have no more utxo to use then let's clear sent_utxos as they may not have been externalized
+            if (this.state.owned_utxos.byKeyValue()
+                .filter!(kv => kv.key !in this.state.sent_utxos)
+                    .filter!(kv => kv.value.output.value >= minInputValuePerOutput).empty)
+                this.state.sent_utxos.clear();
             logTrace("State has been updated: %s", this.state.known);
+        }
 
         logInfo("About to send transactions...");
 
