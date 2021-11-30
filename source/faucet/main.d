@@ -252,7 +252,8 @@ public class Faucet : FaucetAPI
                 this.state.sent_utxos.put(kv.key);
                 return TxBuilder(kv.value.output, kv.key);
             })
-            .map!(txb => txb.unlockSigner(&this.keyUnlocker).split(
+            .map!(txb => txb.unlockSigner(&this.keyUnlocker)
+                .split(
                     secret_keys.byKey() // AA keys are addresses
                     .cycle()    // cycle the range of keys as needed
                     .drop(uniform(0, count, rndGen))    // start at some random position
