@@ -373,7 +373,7 @@ public class Faucet : FaucetAPI
             auto utxo_rng = this.state.owned_utxos.byKeyValue()
                 .filter!(kv => kv.key !in this.state.sent_utxos)
                 .filter!(kv => kv.value.output.value >= minInputValuePerOutput)
-                .take(uniform(10, 100, rndGen));
+                .take(uniform(2, config.tx_generator.merge_threshold, rndGen));
             if (utxo_rng.empty)
                 logInfo("Waiting for unspent utxo");
             else
