@@ -367,7 +367,8 @@ public class Faucet : FaucetAPI
         logInfo("\tMedian: %s, Avg: %s", median, mean);
         logInfo("\tL: %s, H: %s", sutxo[0].output.value, sutxo[$-1].output.value);
 
-        if (this.state.utxos.storage.length > config.tx_generator.merge_threshold)
+        logInfo("\tutxo owned by Faucet: %d entries", this.state.owned_utxos.length);
+        if (this.state.owned_utxos.length > config.tx_generator.merge_threshold)
         {
             auto utxo_rng = this.state.owned_utxos.byKeyValue()
                 .filter!(kv => kv.key !in this.state.sent_utxos)
