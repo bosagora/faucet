@@ -375,7 +375,7 @@ public class Faucet : FaucetAPI
                 .filter!(kv => kv.value.output.value >= minInputValuePerOutput)
                 .take(uniform(2, config.tx_generator.merge_threshold, rndGen));
             if (utxo_rng.empty)
-                logInfo("Waiting for unspent utxo");
+                logInfo("\tWaiting for unspent utxo");
             else
             {
                 auto tx = this.mergeTx(
@@ -384,6 +384,7 @@ public class Faucet : FaucetAPI
                         this.state.sent_utxos.put(kv.key);
                         return tuple(kv.value.output, kv.key);
                     }));
+                logInfo("\tMERGE: Sending a tx of byte size: %s", tx.sizeInBytes);
                 this.randomClient().postTransaction(tx);
                 logDebug("Transaction sent (merge): %s", tx);
                 this.faucet_stats.increaseMetricBy!"faucet_transactions_sent_total"(1);
@@ -396,11 +397,17 @@ public class Faucet : FaucetAPI
                         .filter!(kv => kv.key !in this.state.sent_utxos),
                     config.tx_generator.split_count)
                 .take(uniform(1, 10, rndGen));
-            foreach (tx; rng)
+            if (rng.empty)
+                logInfo("\tSPLIT: Waiting for unspent utxo");
+            else
             {
-                this.randomClient().postTransaction(tx);
-                logDebug("Transaction sent (split): %s", tx);
-                this.faucet_stats.increaseMetricBy!"faucet_transactions_sent_total"(1);
+                logInfo("\tSPLIT: Sending %s txs of total byte size: %s", rng.save.walkLength, rng.save.map!(t => t.sizeInBytes).sum);
+                foreach (tx; rng)
+                {
+                    this.randomClient().postTransaction(tx);
+                    logDebug("Transaction sent (split): %s", tx);
+                    this.faucet_stats.increaseMetricBy!"faucet_transactions_sent_total"(1);
+                }
             }
         }
     }
