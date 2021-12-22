@@ -17,19 +17,15 @@ tx_generator:
   send_interval: 1
 
   # Between how many addresses we split a transaction by
-  split_count: 1
+  split_count: 5
 
   # Maximum number of utxo before merging instead of splitting
-  merge_threshold: 10
+  merge_threshold: 100
 
   # Addresses to send transactions
   addresses:
     - http://127.0.0.1:4002
     - http://127.0.0.1:4003
-    - http://127.0.0.1:4004
-    - http://127.0.0.1:4005
-    - http://127.0.0.1:4006
-    - http://127.0.0.1:4007
 
   # When we deploy Faucet on the real TestNet, the keys used will not be well-known.
   keys:
