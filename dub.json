@@ -42,7 +42,6 @@
 
     "importPaths": [
         "source/",
-
         "submodules/agora/source/",
         "submodules/agora/submodules/base32/src/",
         "submodules/agora/submodules/bitblob/source/",
