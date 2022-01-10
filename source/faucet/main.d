@@ -421,9 +421,14 @@ public class Faucet : FaucetAPI
     /// POST: /send
     public override void sendTransaction (string recv)
     {
+        this.sendTo(recv, false);
+    }
+
+    private void sendTo (string recv, bool freeze) @safe
+    {
         PublicKey pubkey = PublicKey.fromString(recv);
-        ulong amount = 100;
-        Amount leftover = amount.coins;
+        Amount amount = freeze ? 40_000.coins : 100.coins;
+        Amount required = amount + (freeze ? 10_000.coins : 0.coins);
         auto owned_utxo_rng = this.state.owned_utxos.byKeyValue()
             // do not pick already used UTXOs
             .filter!(pair => pair.key !in this.used_utxos);
@@ -442,45 +447,25 @@ public class Faucet : FaucetAPI
         assert(first_utxo.value.output.value > Amount(0));
 
         TxBuilder txb = TxBuilder(first_utxo.value.output, first_utxo.key);
+        this.used_utxos[first_utxo.key] = first_utxo.value;
+        Amount txb_value = first_utxo.value.output.value;
 
-        if (leftover <= first_utxo.value.output.value)
+        while (txb_value < required)
         {
-            Transaction tx = txb.unlockSigner(&this.keyUnlocker)
-                .draw(leftover, [pubkey])
-                .sign();
-            logInfo("Sending %s BOA to %s", amount, recv);
-            this.randomClient().postTransaction(tx);
-            this.faucet_stats.increaseMetricBy!"faucet_transactions_sent_total"(1);
+            auto new_utxo = owned_utxo_rng.front;
+            this.used_utxos[new_utxo.key] = new_utxo.value;
+            owned_utxo_rng.popFront();
+            assert(new_utxo.value.output.value > Amount(0));
+            txb.attach(new_utxo.value.output, new_utxo.key);
+            txb_value += new_utxo.value.output.value;
         }
-        else
-        {
-            txb.draw(first_utxo.value.output.value, [pubkey]);
-            leftover.sub(first_utxo.value.output.value);
 
-            while (leftover > Amount(0))
-            {
-                auto new_utxo = owned_utxo_rng.front;
-                this.used_utxos[new_utxo.key] = new_utxo.value;
-                owned_utxo_rng.popFront();
-                assert(new_utxo.value.output.value > Amount(0));
-
-                if (leftover <= new_utxo.value.output.value)
-                {
-                    txb.attach(new_utxo.value.output, new_utxo.key)
-                       .draw(leftover, [pubkey]);
-                    break;
-                }
-
-                txb.attach(new_utxo.value.output, new_utxo.key)
-                   .draw(new_utxo.value.output.value, [pubkey]);
-                leftover.sub(new_utxo.value.output.value);
-            }
-
-            Transaction tx = txb.unlockSigner(&this.keyUnlocker).sign();
-            logInfo("Sending %s BOA to %s", amount, recv);
-            this.randomClient().postTransaction(tx);
-            this.faucet_stats.increaseMetricBy!"faucet_transactions_sent_total"(1);
-        }
+        Transaction tx = txb.unlockSigner(&this.keyUnlocker)
+            .draw(amount, [pubkey])
+            .sign(freeze ? OutputType.Freeze : OutputType.Payment);
+        logInfo("Sending %s BOA to %s", amount, recv);
+        this.randomClient().postTransaction(tx);
+        this.faucet_stats.increaseMetricBy!"faucet_transactions_sent_total"(1);
     }
 }
 
