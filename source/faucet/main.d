@@ -26,6 +26,7 @@ import agora.common.Types;
 import agora.consensus.data.genesis.Test;
 import agora.consensus.data.Transaction;
 import agora.consensus.state.UTXOSet;
+import agora.crypto.Hash;
 import agora.crypto.Key;
 import agora.script.Signature;
 import agora.serialization.Serializer;
@@ -60,6 +61,9 @@ private SecretKey[PublicKey] secret_keys;
 /// The configuration for faucet as a faucet and a tx generator
 private Config config;
 
+/// PublicKeys of validators that Faucet will freeze stakes for
+private PublicKey[] validators;
+
 /// Holds the state of our application and contains update methods
 private struct State
 {
@@ -72,6 +76,9 @@ private struct State
 
     /// A storage to keep track of UTXOs sent in txs
     private Set!Hash sent_utxos;
+
+    /// Keeps track of the freeze TXs faucet sent
+    private Transaction[PublicKey] freeze_txs;
 
     /// Get UTXOs owned by us that are spendable
     private UTXO[Hash] getOwnedUTXOs () nothrow @safe
@@ -368,6 +375,12 @@ public class Faucet : FaucetAPI
         logInfo("\tL: %s, H: %s", sutxo[0].output.value, sutxo[$-1].output.value);
 
         logInfo("\tutxo owned by Faucet: %d entries", this.state.owned_utxos.length);
+
+        auto to_freeze_pks = validators.filter!((pk) {
+            return this.state.utxos.getUTXOs(pk).byValue.all!(utxo => utxo.output.type != OutputType.Freeze) &&
+                (pk !in this.state.freeze_txs || !this.randomClient().hasTransactionHash(this.state.freeze_txs[pk].hashFull));
+        }).each!(pk => this.sendTo(pk.toString(), true));
+
         if (this.state.owned_utxos.length > config.tx_generator.merge_threshold)
         {
             auto utxo_rng = this.state.owned_utxos.byKeyValue()
@@ -465,6 +478,8 @@ public class Faucet : FaucetAPI
             .sign(freeze ? OutputType.Freeze : OutputType.Payment);
         logInfo("Sending %s BOA to %s", amount, recv);
         this.randomClient().postTransaction(tx);
+        if (freeze)
+            this.state.freeze_txs[pubkey] = tx;
         this.faucet_stats.increaseMetricBy!"faucet_transactions_sent_total"(1);
     }
 }
@@ -534,6 +549,7 @@ int main (string[] args)
     config.tx_generator.seeds.keys.map!(k =>
         KeyPair.fromSeed(SecretKey.fromString(k)))
             .each!(kp => secret_keys.require(kp.address, kp.secret));
+    validators = config.tx_generator.validator_public_keys.map!(pk => PublicKey.fromString(pk)).array;
     logInfo("%s", config);
 
     logInfo("We'll be sending transactions to the following clients: %s", config.tx_generator.addresses);
