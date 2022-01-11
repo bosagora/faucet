@@ -67,6 +67,9 @@ public struct TxGenerator
     /// Keys from the config
     public Seeds seeds;
 
+    /// PublicKeys of validators that Faucet will freeze stakes for
+    public string[] validator_public_keys;
+
     /// Stats port (default: 9113)
     public ushort stats_port;
 
@@ -91,6 +94,7 @@ public struct TxGenerator
         () @trusted { addresses = parseSequence("addresses", yaml_node, true); }();
         () @trusted { seeds.keys = parseSequence("keys", yaml_node, false); }();
         stats_port = yaml_node["stats_port"].as!ushort;
+        () @trusted { validator_public_keys = parseSequence("validator_public_keys", yaml_node, true); }();
     }
 }
 
