@@ -531,7 +531,7 @@ int main (string[] args)
         return 1;
     }
     config.tx_generator.keys.each!(kp => secret_keys.require(kp.address, kp.secret));
-    validators = config.tx_generator.validator_public_keys.map!(pk => PublicKey.fromString(pk)).array;
+    validators = config.tx_generator.validator_public_keys;
     logInfo("%s", config);
 
     logInfo("We'll be sending transactions to the following clients: %s", config.tx_generator.addresses);
