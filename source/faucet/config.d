@@ -15,11 +15,11 @@
 
 module faucet.config;
 
-import dyaml.node;
-import dyaml.loader;
+import agora.config.Attributes;
+import agora.crypto.Key;
 
-import std.exception;
 import std.format;
+import std.getopt;
 
 /// Configuration parameter for Faucet
 public struct Config
@@ -29,24 +29,6 @@ public struct Config
 
     /// config for faucet web
     public Web web;
-
-    this (TxGenerator tx_generator, Web web)
-    {
-        this.tx_generator = tx_generator;
-        this.web = web;
-    }
-}
-
-///
-public struct Seeds
-{
-    public string[] keys;
-
-    /// We do not want to log the key seeds
-    public string toString ()
-    {
-        return format!"%s keys"(keys.length);
-    }
 }
 
 ///
@@ -65,37 +47,13 @@ public struct TxGenerator
     public string[] addresses;
 
     /// Keys from the config
-    public Seeds seeds;
+    public ConfigKey[] keys;
 
     /// PublicKeys of validators that Faucet will freeze stakes for
     public string[] validator_public_keys;
 
     /// Stats port (default: 9113)
     public ushort stats_port;
-
-    ///
-    public this (ulong send_interval, uint split_count, uint merge_threshold,
-        string[] addresses, Seeds seeds, ushort stats_port = 9113)
-    {
-        this.send_interval = send_interval;
-        this.split_count = split_count;
-        this.merge_threshold = merge_threshold;
-        this.addresses = addresses;
-        this.seeds = seeds;
-        this.stats_port = stats_port;
-    }
-
-    ///
-    public this (Node yaml_node) @safe
-    {
-        send_interval = yaml_node["send_interval"].as!ulong;
-        split_count = yaml_node["split_count"].as!uint;
-        merge_threshold = yaml_node["merge_threshold"].as!uint;
-        () @trusted { addresses = parseSequence("addresses", yaml_node, true); }();
-        () @trusted { seeds.keys = parseSequence("keys", yaml_node, false); }();
-        stats_port = yaml_node["stats_port"].as!ushort;
-        () @trusted { validator_public_keys = parseSequence("validator_public_keys", yaml_node, true); }();
-    }
 }
 
 /// The Config for the faucet web
@@ -106,48 +64,20 @@ public struct Web
 
     /// Port to bind for website
     public ushort port;
-
-    ///
-    public this (string address, ushort port = 2766)
-    {
-        this.address = address;
-        this.port = port;
-    }
-
-    ///
-    public this (Node yaml_node) @safe
-    {
-        this.address = yaml_node["address"].as!string;
-        this.port = yaml_node["port"].as!ushort;
-    }
 }
 
-/// Parse the config file
-public Config parseConfigFile (string configPath)
+/// A KeyPair that can be parsed easily
+public struct ConfigKey
 {
-    Node root = Loader.fromFile(configPath).load();
-    return Config(
-        TxGenerator(root["tx_generator"]),
-        Web(root["web"]));
-}
+    /// The underlying value
+    public KeyPair value;
 
-/// Parse the config section
-private string[] parseSequence (string section,
-        Node root, bool optional = false)
-{
-    if (auto yaml_node = section in root)
-        enforce(root[section].type == NodeType.sequence,
-            format("`%s` section must be a sequence", section));
-    else if (optional)
-        return null;
-    else
-        throw new Exception(
-            format("The '%s' section is mandatory and must " ~
-                "specify at least one item", section));
+    ///
+    public alias value this;
 
-    string[] result;
-    foreach (string item; root[section])
-        result ~= item;
-
-    return result;
+    /// Used by the config framework
+    public static ConfigKey fromString (scope const(char)[] str) @safe
+    {
+        return ConfigKey(KeyPair.fromSeed(SecretKey.fromString(str)));
+    }
 }
