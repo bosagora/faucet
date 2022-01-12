@@ -50,7 +50,7 @@ public struct TxGenerator
     public ConfigKey[] keys;
 
     /// PublicKeys of validators that Faucet will freeze stakes for
-    public string[] validator_public_keys;
+    public @Optional PublicKey[] validator_public_keys;
 
     /// Stats port (default: 9113)
     public ushort stats_port;
