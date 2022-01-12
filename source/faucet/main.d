@@ -23,6 +23,7 @@ import agora.api.FullNode;
 import agora.common.Amount;
 import agora.common.Set;
 import agora.common.Types;
+import agora.config.Config;
 import agora.consensus.data.genesis.Test;
 import agora.consensus.data.Transaction;
 import agora.consensus.state.UTXOSet;
@@ -487,44 +488,21 @@ public class Faucet : FaucetAPI
 /// Application entry point
 int main (string[] args)
 {
-    string bind;
+    CLIArgs clargs;
     bool verbose;
-    string configPath = "config.yaml";
 
-    auto helpInfos = getopt(
-        args,
-        "bind", &bind,
-        "c|config", &configPath,
-        "stats-port", &config.tx_generator.stats_port,
-        "v|verbose", &verbose,
-    );
+    auto helpInformation = () {
+        auto r = clargs.parse(args);
+        if (r.helpWanted) return r;
+        return getopt(args,
+            "v|verbose", &verbose);
+    }();
 
-    if (helpInfos.helpWanted)
+    if (helpInformation.helpWanted)
     {
-        defaultGetoptPrinter(
-            "Usage: ./faucet <address>, e.g. ./faucet 'http://127.0.0.1:2826'",
-            helpInfos.options);
+        defaultGetoptPrinter("Usage: ./faucet [-c <path>] - By default `config.yaml` is assumed",
+            helpInformation.options);
         return 0;
-    }
-
-    static void printHelp ()
-    {
-        stderr.writeln("Usage: ./faucet [-c <path>]");
-        stderr.writeln("By default, faucet will attempt to read its configuration from
-                        config.yaml");
-    }
-
-    if (bind.length) try
-    {
-        auto bindurl = URL(bind);
-        config.web.address = bindurl.host;
-        config.web.port = bindurl.port;
-    }
-    catch (Exception exc)
-    {
-        stderr.writeln("Could not parse '", bind, "' as a valid URL");
-        stderr.writeln("Make sure the address contains a scheme, e.g. 'http://127.0.0.1:2766'");
-        return 1;
     }
 
     // We need proper shut down or Faucet get stuck, see bosagora/faucet#72
@@ -544,11 +522,15 @@ int main (string[] args)
         sigaction(SIGTERM, &siginfo, null);
     }
 
-    logInfo("Loading Configuration from %s", configPath);
-    config = parseConfigFile(configPath);
-    config.tx_generator.seeds.keys.map!(k =>
-        KeyPair.fromSeed(SecretKey.fromString(k)))
-            .each!(kp => secret_keys.require(kp.address, kp.secret));
+    logInfo("Loading Configuration from %s", clargs.config_path);
+    try
+        config = parseConfigFile!(Config)(clargs);
+    catch (ConfigException exc)
+    {
+        stderr.writefln("%S", exc);
+        return 1;
+    }
+    config.tx_generator.keys.each!(kp => secret_keys.require(kp.address, kp.secret));
     validators = config.tx_generator.validator_public_keys.map!(pk => PublicKey.fromString(pk)).array;
     logInfo("%s", config);
 
