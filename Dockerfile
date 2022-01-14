@@ -5,7 +5,7 @@ WORKDIR /root/faucet/
 ADD . /root/faucet/
 RUN AGORA_VERSION=${AGORA_VERSION} dub build --skip-registry=all --compiler=ldc2
 
-FROM alpine:edge
+FROM alpine:3.15
 WORKDIR /root/faucet/
 RUN apk add --no-cache ldc-runtime llvm-libunwind libgcc libsodium sqlite-libs
 COPY frontend/ /usr/share/faucet/frontend/
