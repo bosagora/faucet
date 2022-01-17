@@ -21,15 +21,21 @@ import faucet.stats;
 
 import agora.api.FullNode;
 import agora.common.Amount;
+import agora.common.Ensure;
 import agora.common.Set;
+import agora.common.ManagedDatabase;
 import agora.common.Types;
 import agora.config.Config;
 import agora.consensus.data.Block;
 import agora.consensus.data.genesis.Test;
+import agora.consensus.data.Params;
 import agora.consensus.data.Transaction;
+import agora.consensus.state.Ledger;
 import agora.consensus.state.UTXOSet;
+import agora.consensus.state.ValidatorSet;
 import agora.crypto.Hash;
 import agora.crypto.Key;
+import agora.node.BlockStorage;
 import agora.script.Signature;
 import agora.serialization.Serializer;
 import agora.stats.Server;
@@ -43,6 +49,7 @@ import std.exception;
 import std.file;
 import std.format;
 import std.getopt;
+import std.path;
 import std.random;
 import std.range;
 import std.stdio;
@@ -84,12 +91,11 @@ private struct Connection
 /// Holds the state of our application and contains update methods
 private struct State
 {
-    /// The UTXO set at `this.known`
-    private TestUTXOSet utxos;
+    /// Ledger instance
+    private Ledger ledger;
+
     /// UTXOs owned by us
     private UTXO[Hash] owned_utxos;
-    /// The most up-to-date block we know about
-    private Height known;
 
     /// A storage to keep track of UTXOs sent in txs
     private Set!Hash sent_utxos;
@@ -98,36 +104,40 @@ private struct State
     private Transaction[PublicKey] freeze_txs;
 
     /// Get UTXOs owned by us that are spendable
-    private UTXO[Hash] getOwnedUTXOs () nothrow @safe
+    private UTXO[Hash] getOwnedUTXOs () @safe
     {
-        return this.utxos.storage.byKeyValue()
-                   .filter!(tup => tup.value.output.address in secret_keys)
-                   .filter!(tup => tup.value.output.type == OutputType.Payment)
-                   .map!(kv => tuple(kv.key, kv.value))
-                   .assocArray();
+        UTXO[Hash] result;
+        foreach (hash, utxo; this.ledger.utxos)
+        {
+            if (utxo.output.address !in secret_keys)
+                continue;
+            if (utxo.output.type != OutputType.Payment)
+                continue;
+            result[hash] = utxo;
+        }
+        return result;
     }
 
-    /// Update the UTXO set and the `known` height
-    private bool update (Connection client, Height from) @safe
+    /// Fetch blocks from a remote and add them to the Ledger
+    private bool update (Connection client) @safe
     {
         Height remote;
         try
             remote = client.getBlockHeight();
         catch (Exception exc)
         {
-            log.error("Client '{}' returned an error on `getBlockHeight`: {}",
+            log.error("Client '{}' returned an error on getBlockHeight: {}",
                      client.address, () @trusted { return exc.message(); }() );
             return false;
         }
 
-        log.trace("Peer {} is at height: {} (us: {})", client.address, remote, from);
-        if (from >= remote + 1)
-            return false;
-
-        do {
+        log.trace("Peer {} is at height: {} (us: {})", client.address, remote, this.ledger.height);
+        while ((this.ledger.height() + 1) < remote)
+        {
             const(Block)[] blocks;
+            const Height from = this.ledger.height + 1;
             log.info("Requesting blocks [{} .. {}] from {}", from, remote, client.address);
-            const max_blocks = cast(uint) (remote - from + 1);
+            const max_blocks = cast(uint) (remote - from);
             try
                 blocks = client.getBlocksFrom(from, max_blocks);
             catch (Exception exc)
@@ -144,21 +154,25 @@ private struct State
             else
                 log.warn("No blocks received from '{}'", client.address);
 
-            const current_len = this.utxos.storage.length;
-            foreach (ref b; blocks)
-                foreach (ref tx; b.txs)
-                    this.utxos.updateUTXOCache(tx, b.header.height, WK.Keys.CommonsBudget.address);
+            const current_len = this.ledger.utxos.length;
+            foreach (idx, ref b; blocks)
+            {
+                if (auto error = this.ledger.acceptBlock(b))
+                {
+                    log.error("Ledger refused externalization of block {}/{} (height: {}): {}",
+                             idx, blocks.length, b.header.height, error);
+                    log.error("Ledger height: {} - Faulty block: {}", this.ledger.height, b);
+                    return false;
+                }
+            }
 
             // Use signed arithmetic to avoid negative values wrapping around
-            const long delta = (cast(long) this.utxos.storage.length) - current_len;
+            const long delta = (cast(long) this.ledger.utxos.length) - current_len;
             log.info("UTXO delta: {}", delta);
-            this.known = blocks[$ - 1].header.height;
-            from += blocks.length;
-        } while (this.known < remote);
+        }
 
         this.owned_utxos = this.getOwnedUTXOs();
         assert(this.owned_utxos.length);
-
         return true;
     }
 }
@@ -230,7 +244,12 @@ public class Faucet : FaucetAPI
         // Create client for each address
         config.tx_generator.addresses.each!(address =>
             this.clients ~= Connection(address, new RestInterfaceClient!API(address)));
-        this.state.utxos = new TestUTXOSet();
+        mkdirRecurse(config.data.dir);
+        auto stateDB = new ManagedDatabase(config.data.dir.buildPath("faucet.db"));
+        auto params = makeConsensusParams(config.data.testing, config.consensus);
+        this.state.ledger = new Ledger(params, stateDB,
+            new BlockStorage(config.data.dir),
+            new ValidatorSet(stateDB, params));
         Utils.getCollectorRegistry().addCollector(&this.collectStats);
     }
 
@@ -338,12 +357,11 @@ public class Faucet : FaucetAPI
 
     public void setup (uint count)
     {
-        while (!this.state.update(randomClient(), Height(0)))
+        while (!this.state.update(randomClient()))
             sleep(5.seconds);
-
         const utxo_len = this.state.owned_utxos.length;
 
-        log.info("Setting up: height={}, {} UTXOs found", this.state.known, utxo_len);
+        log.info("Setting up: height={}, {} UTXOs found", this.state.ledger.height(), utxo_len);
         if (utxo_len < 200)
         {
             assert(utxo_len >= 1);
@@ -373,17 +391,17 @@ public class Faucet : FaucetAPI
 
     void send ()
     {
-        if (this.state.utxos.storage.length == 0)
+        if (this.state.owned_utxos.length == 0)
             this.setup(config.tx_generator.split_count);
 
-        if (this.state.update(randomClient(), Height(this.state.known + 1)))
+        if (this.state.update(randomClient()))
         {
             // If we have no more utxo to use then let's clear sent_utxos as they may not have been externalized
             if (this.state.owned_utxos.byKeyValue()
                 .filter!(kv => kv.key !in this.state.sent_utxos)
                     .filter!(kv => kv.value.output.value >= minInputValuePerOutput).empty)
                 this.state.sent_utxos.clear();
-            log.trace("State has been updated: {}", this.state.known);
+            log.trace("State has been updated: {}", this.state.ledger.height());
         }
 
         log.info("About to send transactions...");
@@ -391,22 +409,24 @@ public class Faucet : FaucetAPI
         // Sort them so we don't iterate multiple time
         // Note: This may cause a lot of memory usage, might need restructuing later
         // Mutable because of https://issues.dlang.org/show_bug.cgi?id=9792
-        auto sutxo = this.state.utxos.values.sort!((a, b) => a.output.value < b.output.value);
+        auto sutxo = this.state.owned_utxos.values.sort!((a, b) => a.output.value < b.output.value);
         const size = sutxo.length();
-        log.info("\tUTXO set: {} entries", size);
+        const tsize = this.state.ledger.utxos.length();
+        log.info("\tUTXO set: {}/{} UTXOs are owned by Faucet", size, tsize);
 
-        immutable median = sutxo[size / 2].output.value;
-        // Should be 500M (5,000,000,000,000,000) for the time being
-        immutable sum = sutxo.map!(utxo => utxo.output.value).sum();
-        auto mean = Amount(sum); mean.div(size);
+        if (sutxo.length)
+        {
+            immutable median = sutxo[size / 2].output.value;
+            // Should be 500M (5,000,000,000,000,000) for the time being
+            immutable sum = sutxo.map!(utxo => utxo.output.value).sum();
+            auto mean = Amount(sum); mean.div(size);
 
-        log.info("\tMedian: {}, Avg: {}", median, mean);
-        log.info("\tL: {}, H: {}", sutxo[0].output.value, sutxo[$-1].output.value);
-
-        log.info("\tutxo owned by Faucet: {} entries", this.state.owned_utxos.length);
+            log.info("\tMedian: {}, Avg: {}", median, mean);
+            log.info("\tL: {}, H: {}", sutxo[0].output.value, sutxo[$-1].output.value);
+        }
 
         auto to_freeze_pks = validators.filter!((pk) {
-            return this.state.utxos.getUTXOs(pk).byValue.all!(utxo => utxo.output.type != OutputType.Freeze) &&
+            return this.state.ledger.utxos.getUTXOs(pk).byValue.all!(utxo => utxo.output.type != OutputType.Freeze) &&
                 (pk !in this.state.freeze_txs || !this.randomClient().hasTransactionHash(this.state.freeze_txs[pk].hashFull));
         }).each!(pk => this.sendTo(pk.toString(), true));
 
@@ -455,9 +475,9 @@ public class Faucet : FaucetAPI
     }
 
     /// GET: /utxos
-    public override UTXO[Hash] getUTXOs () pure nothrow @safe
+    public override UTXO[Hash] getUTXOs (PublicKey key) @safe nothrow
     {
-        return this.state.utxos.storage;
+        return this.state.ledger.utxos.getUTXOs(key);
     }
 
     /// POST: /send
@@ -649,4 +669,17 @@ private SigHandlerT getSignalHandler () @safe pure nothrow @nogc
     }
 
     return &signalHandler;
+}
+
+/// Make a new instance of the consensus parameters based on the config
+/// Adapted from `FullNode.makeConsensusConfig`
+public static makeConsensusParams (bool testing, in ConsensusConfig config)
+{
+    import TESTNET = agora.consensus.data.genesis.Test;
+    import COINNET = agora.consensus.data.genesis.Coinnet;
+
+    return new immutable(ConsensusParams)(
+        testing ? TESTNET.GenesisBlock : COINNET.GenesisBlock,
+        testing ? TESTNET.CommonsBudgetAddress : COINNET.CommonsBudgetAddress,
+        config);
 }

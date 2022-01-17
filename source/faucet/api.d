@@ -41,15 +41,18 @@ public interface FaucetAPI
     /***************************************************************************
 
         Returns:
-          An array of all UTXOs known
+          An array of all UTXOs known for `key`
+
+        Params:
+          key = The key to look up
 
         API:
-          GET /utxos
+          GET /utxos?key=boa1...
 
     ***************************************************************************/
 
     @path("/utxos")
-    public UTXO[Hash] getUTXOs ();
+    public UTXO[Hash] getUTXOs (PublicKey key);
 
     /***************************************************************************
 
