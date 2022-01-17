@@ -17,6 +17,7 @@ module faucet.config;
 
 import agora.common.Types;
 import agora.config.Attributes;
+import agora.consensus.data.Params;
 import agora.crypto.Key;
 import agora.utils.Log;
 
@@ -34,6 +35,12 @@ public struct Config
 
     /// Config for the stats interface (disabled by default)
     public @Optional ListenerConfig stats;
+
+    /// Ledger persistence configuration
+    public DataConfig data;
+
+    /// Consensus configuration to match the network
+    public ConsensusConfig consensus;
 
     /// Configuration for the Loggers
     @Key("name")
@@ -103,4 +110,14 @@ public struct ConfigKey
     {
         return ConfigKey(KeyPair.fromSeed(SecretKey.fromString(str)));
     }
+}
+
+/// Configuration for the Ledger
+public struct DataConfig
+{
+    /// Whether the network is in testing mode or not
+    public bool testing;
+
+    /// Where to write the Ledger data to
+    public string dir = "data";
 }
