@@ -67,6 +67,19 @@ private PublicKey[] validators;
 
 mixin AddLogger!();
 
+/// Used for better diagnostic
+private struct Connection
+{
+    /// Address we reference
+    public Address address;
+
+    /// Object used for communication
+    public API api;
+
+    /// Convenience alias
+    public alias api this;
+}
+
 /// Holds the state of our application and contains update methods
 private struct State
 {
@@ -94,7 +107,7 @@ private struct State
     }
 
     /// Update the UTXO set and the `known` height
-    private bool update (API client, Height from) @safe
+    private bool update (Connection client, Height from) @safe
     {
         try
         {
@@ -160,7 +173,7 @@ public class Faucet : FaucetAPI
     private UTXO[Hash] used_utxos;
 
     /// A client object implementing `API`
-    private API[] clients;
+    private Connection[] clients;
 
     /// Minimum input value per output
     /// This is to prevent transactions with too little input value to cover the fees.
@@ -204,7 +217,7 @@ public class Faucet : FaucetAPI
     {
         // Create client for each address
         config.tx_generator.addresses.each!(address =>
-            this.clients ~= new RestInterfaceClient!API(address));
+            this.clients ~= Connection(address, new RestInterfaceClient!API(address)));
         this.state.utxos = new TestUTXOSet();
         Utils.getCollectorRegistry().addCollector(&this.collectStats);
     }
@@ -218,7 +231,7 @@ public class Faucet : FaucetAPI
 
     *******************************************************************************/
 
-    private API randomClient () @trusted
+    private Connection randomClient () @trusted
     {
         return choice(this.clients);
     }
