@@ -15,6 +15,7 @@
 
 module faucet.config;
 
+import agora.common.Types;
 import agora.config.Attributes;
 import agora.crypto.Key;
 
@@ -44,7 +45,7 @@ public struct TxGenerator
     public uint merge_threshold;
 
     /// Addresses to send the transactions to
-    public string[] addresses;
+    public Address[] addresses;
 
     /// Keys from the config
     public ConfigKey[] keys;
