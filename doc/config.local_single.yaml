@@ -10,6 +10,9 @@ web:
 ################################################################################
 tx_generator:
 
+  # interface to listen for stats requests
+  stats_inf: 0.0.0.0
+
   # port number that can provide stats
   stats_port: 9113
 
