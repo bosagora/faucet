@@ -24,6 +24,7 @@ import agora.common.Amount;
 import agora.common.Set;
 import agora.common.Types;
 import agora.config.Config;
+import agora.consensus.data.Block;
 import agora.consensus.data.genesis.Test;
 import agora.consensus.data.Transaction;
 import agora.consensus.state.UTXOSet;
@@ -109,45 +110,56 @@ private struct State
     /// Update the UTXO set and the `known` height
     private bool update (Connection client, Height from) @safe
     {
+        Height remote;
         try
+            remote = client.getBlockHeight();
+        catch (Exception exc)
         {
-            const height = client.getBlockHeight();
-            if (from >= height + 1)
+            log.error("Client '{}' returned an error on `getBlockHeight`: {}",
+                     client.address, () @trusted { return exc.message(); }() );
+            return false;
+        }
+
+        log.trace("Peer {} is at height: {} (us: {})", client.address, remote, from);
+        if (from >= remote + 1)
+            return false;
+
+        do {
+            const(Block)[] blocks;
+            log.info("Requesting blocks [{} .. {}] from {}", from, remote, client.address);
+            const max_blocks = cast(uint) (remote - from + 1);
+            try
+                blocks = client.getBlocksFrom(from, max_blocks);
+            catch (Exception exc)
             {
-                if (from > height + 1)
-                    log.error("Agora reported a Height of {} but we are at {}", height, this.known);
+                log.error("Client '{}' returned an error on getBlocksFrom({}, {}): {}",
+                          client.address, from, max_blocks,
+                          () @trusted { return exc.message(); }());
                 return false;
             }
 
-            do {
-                const blocks = client.getBlocksFrom(from, cast(uint) (height - from + 1));
-                log.info("Updating state: blocks [{} .. {}] ({})", from, height, blocks.length);
-                const current_len = this.utxos.storage.length;
+            if (blocks.length)
+                log.info("Received {} blocks: [{} .. {}]", blocks.length,
+                         blocks[0].header.height, blocks[$ - 1].header.height);
+            else
+                log.warn("No blocks received from '{}'", client.address);
 
-                foreach (ref b; blocks)
-                    foreach (ref tx; b.txs)
-                        this.utxos.updateUTXOCache(tx, b.header.height, WK.Keys.CommonsBudget.address);
+            const current_len = this.utxos.storage.length;
+            foreach (ref b; blocks)
+                foreach (ref tx; b.txs)
+                    this.utxos.updateUTXOCache(tx, b.header.height, WK.Keys.CommonsBudget.address);
 
-                // Use signed arithmetic to avoid negative values wrapping around
-                const long delta = (cast(long) this.utxos.storage.length) - current_len;
-                log.info("UTXO delta: {}", delta);
-                this.known = blocks[$ - 1].header.height;
-                from += blocks.length;
-            } while (this.known < height);
+            // Use signed arithmetic to avoid negative values wrapping around
+            const long delta = (cast(long) this.utxos.storage.length) - current_len;
+            log.info("UTXO delta: {}", delta);
+            this.known = blocks[$ - 1].header.height;
+            from += blocks.length;
+        } while (this.known < remote);
 
-            this.owned_utxos = this.getOwnedUTXOs();
-            assert(this.owned_utxos.length);
+        this.owned_utxos = this.getOwnedUTXOs();
+        assert(this.owned_utxos.length);
 
-            return true;
-        }
-        // The exception that was thrown is likely from the network operation
-        // (`getBlockHeight` / `getBlocksFrom`), so just warn and retry later
-        catch (Exception e)
-        {
-            log.error("Exception thrown while updating state: {}",
-                      () @trusted { return e.message(); }());
-            return false;
-        }
+        return true;
     }
 }
 
