@@ -35,6 +35,7 @@ import agora.stats.Server;
 import agora.stats.Utils;
 import agora.utils.Test;
 import agora.script.Lock;
+import agora.utils.Log;
 
 import std.algorithm;
 import std.exception;
@@ -49,7 +50,6 @@ import std.typecons;
 import core.time;
 
 import vibe.core.core;
-import vibe.core.log;
 import vibe.http.fileserver;
 import vibe.http.router;
 import vibe.http.server;
@@ -64,6 +64,8 @@ private Config config;
 
 /// PublicKeys of validators that Faucet will freeze stakes for
 private PublicKey[] validators;
+
+mixin AddLogger!();
 
 /// Holds the state of our application and contains update methods
 private struct State
@@ -100,13 +102,13 @@ private struct State
             if (from >= height + 1)
             {
                 if (from > height + 1)
-                    logError("Agora reported a Height of %s but we are at %s", height, this.known);
+                    log.error("Agora reported a Height of {} but we are at {}", height, this.known);
                 return false;
             }
 
             do {
                 const blocks = client.getBlocksFrom(from, cast(uint) (height - from + 1));
-                logInfo("Updating state: blocks [%s .. %s] (%s)", from, height, blocks.length);
+                log.info("Updating state: blocks [{} .. {}] ({})", from, height, blocks.length);
                 const current_len = this.utxos.storage.length;
 
                 foreach (ref b; blocks)
@@ -115,7 +117,7 @@ private struct State
 
                 // Use signed arithmetic to avoid negative values wrapping around
                 const long delta = (cast(long) this.utxos.storage.length) - current_len;
-                logInfo("UTXO delta: %s", delta);
+                log.info("UTXO delta: {}", delta);
                 this.known = blocks[$ - 1].header.height;
                 from += blocks.length;
             } while (this.known < height);
@@ -129,7 +131,8 @@ private struct State
         // (`getBlockHeight` / `getBlocksFrom`), so just warn and retry later
         catch (Exception e)
         {
-            () @trusted { logWarn("Exception thrown while updating state: %s", e.msg); }();
+            log.error("Exception thrown while updating state: {}",
+                      () @trusted { return e.message(); }());
             return false;
         }
     }
@@ -315,7 +318,7 @@ public class Faucet : FaucetAPI
 
         const utxo_len = this.state.owned_utxos.length;
 
-        logInfo("Setting up: height=%s, %s UTXOs found", this.state.known, utxo_len);
+        log.info("Setting up: height={}, {} UTXOs found", this.state.known, utxo_len);
         if (utxo_len < 200)
         {
             assert(utxo_len >= 1);
@@ -355,27 +358,27 @@ public class Faucet : FaucetAPI
                 .filter!(kv => kv.key !in this.state.sent_utxos)
                     .filter!(kv => kv.value.output.value >= minInputValuePerOutput).empty)
                 this.state.sent_utxos.clear();
-            logTrace("State has been updated: %s", this.state.known);
+            log.trace("State has been updated: {}", this.state.known);
         }
 
-        logInfo("About to send transactions...");
+        log.info("About to send transactions...");
 
         // Sort them so we don't iterate multiple time
         // Note: This may cause a lot of memory usage, might need restructuing later
         // Mutable because of https://issues.dlang.org/show_bug.cgi?id=9792
         auto sutxo = this.state.utxos.values.sort!((a, b) => a.output.value < b.output.value);
         const size = sutxo.length();
-        logInfo("\tUTXO set: %d entries", size);
+        log.info("\tUTXO set: {} entries", size);
 
         immutable median = sutxo[size / 2].output.value;
         // Should be 500M (5,000,000,000,000,000) for the time being
         immutable sum = sutxo.map!(utxo => utxo.output.value).sum();
         auto mean = Amount(sum); mean.div(size);
 
-        logInfo("\tMedian: %s, Avg: %s", median, mean);
-        logInfo("\tL: %s, H: %s", sutxo[0].output.value, sutxo[$-1].output.value);
+        log.info("\tMedian: {}, Avg: {}", median, mean);
+        log.info("\tL: {}, H: {}", sutxo[0].output.value, sutxo[$-1].output.value);
 
-        logInfo("\tutxo owned by Faucet: %d entries", this.state.owned_utxos.length);
+        log.info("\tutxo owned by Faucet: {} entries", this.state.owned_utxos.length);
 
         auto to_freeze_pks = validators.filter!((pk) {
             return this.state.utxos.getUTXOs(pk).byValue.all!(utxo => utxo.output.type != OutputType.Freeze) &&
@@ -389,7 +392,7 @@ public class Faucet : FaucetAPI
                 .filter!(kv => kv.value.output.value >= minInputValuePerOutput)
                 .take(uniform(2, config.tx_generator.merge_threshold, rndGen));
             if (utxo_rng.empty)
-                logInfo("\tWaiting for unspent utxo");
+                log.info("\tWaiting for unspent utxo");
             else
             {
                 auto tx = this.mergeTx(
@@ -398,9 +401,9 @@ public class Faucet : FaucetAPI
                         this.state.sent_utxos.put(kv.key);
                         return tuple(kv.value.output, kv.key);
                     }));
-                logInfo("\tMERGE: Sending a tx of byte size: %s", tx.sizeInBytes);
+                log.info("\tMERGE: Sending a tx of byte size: {}", tx.sizeInBytes);
                 this.randomClient().postTransaction(tx);
-                logDebug("Transaction sent (merge): %s", tx);
+                log.dbg("Transaction sent (merge): {}", tx);
                 this.faucet_stats.increaseMetricBy!"faucet_transactions_sent_total"(1);
             }
         }
@@ -412,14 +415,14 @@ public class Faucet : FaucetAPI
                     config.tx_generator.split_count)
                 .take(uniform(1, 10, rndGen));
             if (rng.empty)
-                logInfo("\tSPLIT: Waiting for unspent utxo");
+                log.info("\tSPLIT: Waiting for unspent utxo");
             else
             {
-                logInfo("\tSPLIT: Sending %s txs of total byte size: %s", rng.save.walkLength, rng.save.map!(t => t.sizeInBytes).sum);
+                log.info("\tSPLIT: Sending {} txs of total byte size: {}", rng.save.walkLength, rng.save.map!(t => t.sizeInBytes).sum);
                 foreach (tx; rng)
                 {
                     this.randomClient().postTransaction(tx);
-                    logDebug("Transaction sent (split): %s", tx);
+                    log.dbg("Transaction sent (split): {}", tx);
                     this.faucet_stats.increaseMetricBy!"faucet_transactions_sent_total"(1);
                 }
             }
@@ -450,8 +453,8 @@ public class Faucet : FaucetAPI
         auto owned_utxo_len = owned_utxo_rng.take(2).count;
         if (owned_utxo_len <= 1)
         {
-            logError("Insufficient UTXOs in storage. # of UTXOs: %s", owned_utxo_len);
-            throw new Exception(format("Insufficient UTXOs in storage. # of UTXOs: %s", owned_utxo_len));
+            log.error("Insufficient UTXOs in storage. # of UTXOs: {}", owned_utxo_len);
+            throw new Exception(format("Insufficient UTXOs in storage. # of UTXOs: {}", owned_utxo_len));
         }
 
         auto first_utxo = owned_utxo_rng.front;
@@ -477,7 +480,7 @@ public class Faucet : FaucetAPI
         Transaction tx = txb.unlockSigner(&this.keyUnlocker)
             .draw(amount, [pubkey])
             .sign(freeze ? OutputType.Freeze : OutputType.Payment);
-        logInfo("Sending %s BOA to %s", amount, recv);
+        log.info("Sending {} BOA to {}", amount, recv);
         this.randomClient().postTransaction(tx);
         if (freeze)
             this.state.freeze_txs[pubkey] = tx;
@@ -522,7 +525,6 @@ int main (string[] args)
         sigaction(SIGTERM, &siginfo, null);
     }
 
-    logInfo("Loading Configuration from %s", clargs.config_path);
     try
         config = parseConfigFile!(Config)(clargs);
     catch (ConfigException exc)
@@ -530,15 +532,21 @@ int main (string[] args)
         stderr.writefln("%S", exc);
         return 1;
     }
+
+    foreach (const ref settings; config.logging)
+    {
+        if (settings.name.length == 0 || settings.name == "vibe")
+            setVibeLogLevel(settings.level);
+        configureLogger(settings, true);
+    }
+
     config.tx_generator.keys.each!(kp => secret_keys.require(kp.address, kp.secret));
     validators = config.tx_generator.validator_public_keys;
-    logInfo("%s", config);
+    log.trace("{}", config);
 
-    logInfo("We'll be sending transactions to the following clients: %s", config.tx_generator.addresses);
+    log.info("We'll be sending transactions to the following clients: {}", config.tx_generator.addresses);
     inst = new Faucet();
     inst.stats_server = new StatsServer(config.tx_generator.stats_port);
-
-    setLogLevel(verbose ? LogLevel.trace : LogLevel.info);
 
     inst.sendTx = setTimer(config.tx_generator.send_interval.seconds, () => inst.send(), true);
     if (config.web.address.length)
@@ -559,7 +567,7 @@ private HTTPListener startListeningInterface (in Config config, Faucet faucet)
     /// By default, match the underlying files
     router.match(HTTPMethod.GET, "*", serveStaticFiles(path));
 
-    logInfo("About to listen to HTTP: %s:%d", config.web.address, config.web.port);
+    log.info("About to listen to HTTP: {}:{}", config.web.address, config.web.port);
     return listenHTTP(settings, router);
 }
 

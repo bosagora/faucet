@@ -18,6 +18,7 @@ module faucet.config;
 import agora.common.Types;
 import agora.config.Attributes;
 import agora.crypto.Key;
+import agora.utils.Log;
 
 import std.format;
 import std.getopt;
@@ -30,6 +31,16 @@ public struct Config
 
     /// config for faucet web
     public Web web;
+
+    /// Configuration for the Loggers
+    @Key("name")
+    public LoggerConfig[] logging = [ {
+        name: null,
+        level: LogLevel.Info,
+        propagate: true,
+        console: true,
+        additive: true,
+    } ];
 }
 
 ///
