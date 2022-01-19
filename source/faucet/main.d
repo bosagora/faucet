@@ -546,7 +546,7 @@ int main (string[] args)
 
     log.info("We'll be sending transactions to the following clients: {}", config.tx_generator.addresses);
     inst = new Faucet();
-    inst.stats_server = new StatsServer(config.tx_generator.stats_port);
+    inst.stats_server = new StatsServer(config.tx_generator.stats_intf, config.tx_generator.stats_port);
 
     inst.sendTx = setTimer(config.tx_generator.send_interval.seconds, () => inst.send(), true);
     if (config.web.address.length)
