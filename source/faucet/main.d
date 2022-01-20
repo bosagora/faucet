@@ -567,7 +567,7 @@ private HTTPListener startListeningInterface (in ListenerConfig web, Faucet fauc
     /// By default, match the underlying files
     router.match(HTTPMethod.GET, "*", serveStaticFiles(path));
 
-    log.info("About to listen to HTTP: {}:{}", web.address, web.port);
+    log.info("About to listen to HTTP: {}:{}", web.address, web.port.value);
     return listenHTTP(settings, router);
 }
 
