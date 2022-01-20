@@ -29,8 +29,11 @@ public struct Config
     /// configuration for tx generator
     public TxGenerator tx_generator;
 
-    /// config for faucet web
-    public Web web;
+    /// Config for faucet web (disabled by default)
+    public @Optional ListenerConfig web;
+
+    /// Config for the stats interface (disabled by default)
+    public @Optional ListenerConfig stats;
 
     /// Configuration for the Loggers
     @Key("name")
@@ -63,22 +66,27 @@ public struct TxGenerator
 
     /// PublicKeys of validators that Faucet will freeze stakes for
     public @Optional PublicKey[] validator_public_keys;
-
-    /// Stats interface
-    public string stats_intf;
-
-    /// Stats port (default: 9113)
-    public ushort stats_port;
 }
 
-/// The Config for the faucet web
-public struct Web
+/// Describes an interface on which we listen
+public struct ListenerConfig
 {
-    /// Address to bind for website
+    /// Address to bind to (netmask)
     public string address;
 
-    /// Port to bind for website
-    public ushort port;
+    /// Port to bind to
+    public SetInfo!(ushort) port;
+
+    ///
+    public void validate () const
+    {
+        if (this.address.length && !this.port.set)
+            throw new Exception("If 'address' is set, 'port' must be too");
+        if (!this.address.length && this.port.set)
+            throw new Exception("If 'port' is set, 'address' must be too");
+        if (this.port.set && this.port.value == 0)
+            throw new Exception("0 is not a valid value for port");
+    }
 }
 
 /// A KeyPair that can be parsed easily

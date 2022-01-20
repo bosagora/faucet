@@ -546,18 +546,18 @@ int main (string[] args)
 
     log.info("We'll be sending transactions to the following clients: {}", config.tx_generator.addresses);
     inst = new Faucet();
-    inst.stats_server = new StatsServer(config.tx_generator.stats_intf, config.tx_generator.stats_port);
+    inst.stats_server = new StatsServer(config.stats.address, config.stats.port);
 
     inst.sendTx = setTimer(config.tx_generator.send_interval.seconds, () => inst.send(), true);
     if (config.web.address.length)
-        inst.webInterface = startListeningInterface(config, inst);
+        inst.webInterface = startListeningInterface(config.web, inst);
     return runEventLoop();
 }
 
-private HTTPListener startListeningInterface (in Config config, Faucet faucet)
+private HTTPListener startListeningInterface (in ListenerConfig web, Faucet faucet)
 {
-    auto settings = new HTTPServerSettings(config.web.address);
-    settings.port = config.web.port;
+    auto settings = new HTTPServerSettings(web.address);
+    settings.port = web.port;
     auto router = new URLRouter();
     router.registerRestInterface(faucet);
 
@@ -567,7 +567,7 @@ private HTTPListener startListeningInterface (in Config config, Faucet faucet)
     /// By default, match the underlying files
     router.match(HTTPMethod.GET, "*", serveStaticFiles(path));
 
-    log.info("About to listen to HTTP: {}:{}", config.web.address, config.web.port);
+    log.info("About to listen to HTTP: {}:{}", web.address, web.port);
     return listenHTTP(settings, router);
 }
 
