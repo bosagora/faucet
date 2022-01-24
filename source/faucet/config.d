@@ -16,10 +16,11 @@
 module faucet.config;
 
 import agora.common.Types;
-import agora.config.Attributes;
 import agora.consensus.data.Params;
 import agora.crypto.Key;
 import agora.utils.Log;
+
+import configy.Attributes;
 
 import std.format;
 import std.getopt;
