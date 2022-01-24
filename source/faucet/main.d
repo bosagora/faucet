@@ -25,7 +25,6 @@ import agora.common.Ensure;
 import agora.common.Set;
 import agora.common.ManagedDatabase;
 import agora.common.Types;
-import agora.config.Config;
 import agora.consensus.data.Block;
 import agora.consensus.data.genesis.Test;
 import agora.consensus.data.Params;
@@ -43,6 +42,8 @@ import agora.stats.Utils;
 import agora.utils.Test;
 import agora.script.Lock;
 import agora.utils.Log;
+
+import configy.Read;
 
 import std.algorithm;
 import std.exception;
