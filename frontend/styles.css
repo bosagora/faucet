@@ -57,3 +57,7 @@ body {
   background: #ffccd9;
   color: #ff3333;
 }
+
+.g-recaptcha {
+  display: inline-block;
+}
