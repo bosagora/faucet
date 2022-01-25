@@ -28,11 +28,20 @@
           <div class="form-floating" hidden>
             <input name="amount" type="text" class="form-control" id="floatingInput" value="100" readonly>
             <label for="floatingInput">Amount (fixed at 100 BOA)</label>
+            <br>
           </div>
-          <br>
           <div class="text-center g-recaptcha" data-sitekey="6Ld81FkdAAAAAJChgf0qMTWlbiYP1zznEY9_RvH_"></div>
           <br>
-          <input id="submitform" class="w-90 btn btn-lg btn-primary" type="submit" value="Send test BOA to address">
+          <div class="btn-group-vertical w-100">
+            <button id="submitform" class="btn btn-lg btn-success" type="submit"
+              data-toggle="tooltip" data-placement="top" title="Sends 100 BOA to address">
+              Send test BOA
+            </button>
+            <button id="createstake" class="btn btn-lg btn-primary"
+              data-toggle="tooltip" data-placement="bottom" title="Sends and freezes 40,000 BOA for address">
+              Create Validator Stake
+            </button>
+          </div>
         </form>
       <br>
         <div id="valid" class="result" style="display: none;">
@@ -46,36 +55,47 @@
   <script>
     $(document).ready(function() {
         $('#submitform').prop('disabled', true);
+        $('#createstake').prop('disabled', true);
         $('#recv').keyup(function() {
             if($(this).val() != '') {
             $('#submitform').prop('disabled', false);
+            $('#createstake').prop('disabled', false);
             }
         });
+
+      function bHandler(url) {
+          $('#submitform').prop('disabled', true);
+          $('#createstake').prop('disabled', true);
+          $('#valid').fadeOut(10);
+          $('#invalid').fadeOut(10);
+          var address = JSON.stringify({recv : $("#recv").val()});
+          $.ajax(
+          {
+            url : url,
+            contentType : "application/json",
+            type : "POST",
+            data : address
+          }).done(function(data) {
+              $('#valid').fadeIn(250);
+          }).fail(function(data) {
+              var failReason;
+              try {
+                  failReason = data['responseJSON']['statusMessage'];
+              }
+              catch (e) {
+                  console.log(e);
+                  failReason = "Faucet currently unavailable. Please try later.";
+              }
+              $('#invalid').text(failReason).fadeIn(250);
+          });
+      };
       $("#submitform").click(function(e) {
         e.preventDefault(); // STOP default action
-        $('#submitform').prop('disabled', true);
-        $('#valid').fadeOut(10);
-        $('#invalid').fadeOut(10);
-        var address = JSON.stringify({recv : $("#recv").val()});
-        $.ajax(
-        {
-          url : "send",
-          contentType : "application/json",
-          type : "POST",
-          data : address
-        }).done(function(data) {
-            $('#valid').fadeIn(250);
-        }).fail(function(data) {
-            var failReason;
-            try {
-                failReason = data['responseJSON']['statusMessage'];
-            }
-            catch (e) {
-                console.log(e);
-                failReason = "Faucet currently unavailable. Please try later.";
-            }
-            $('#invalid').text(failReason).fadeIn(250);
-        });
+        bHandler('send');
+      });
+      $("#createstake").click(function(e) {
+        e.preventDefault(); // STOP default action
+        bHandler('stake');
       });
     });
   </script>
