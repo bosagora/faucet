@@ -487,6 +487,12 @@ public class Faucet : FaucetAPI
         this.sendTo(recv, false);
     }
 
+    /// POST: /stake
+    public override void createValidatorStake (string recv)
+    {
+        this.sendTo(recv, true);
+    }
+
     private void sendTo (string recv, bool freeze) @safe
     {
         PublicKey pubkey = PublicKey.fromString(recv);
