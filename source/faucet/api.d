@@ -68,4 +68,19 @@ public interface FaucetAPI
 
     @path("/send")
     public void sendTransaction (@viaBody("recv") string recv);
+
+    /***************************************************************************
+
+        Create validator stake (40,000 BOA) for `KEY`, using owned UTXOs
+
+        API:
+          POST /stake
+
+        Params:
+          recv = the destination key
+
+    ***************************************************************************/
+
+    @path("/stake")
+    public void createValidatorStake (@viaBody("recv") string recv);
 }
