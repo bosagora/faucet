@@ -500,7 +500,7 @@ public class Faucet : FaucetAPI
         if (owned_utxo_len <= 1)
         {
             log.error("Insufficient UTXOs in storage. # of UTXOs: {}", owned_utxo_len);
-            throw new Exception(format("Insufficient UTXOs in storage. # of UTXOs: {}", owned_utxo_len));
+            throw new Exception(format("Insufficient UTXOs in storage. # of UTXOs: %s", owned_utxo_len));
         }
 
         auto first_utxo = owned_utxo_rng.front;
