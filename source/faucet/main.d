@@ -71,8 +71,6 @@ private SecretKey[PublicKey] secret_keys;
 /// PublicKeys of validators that Faucet will freeze stakes for
 private PublicKey[] validators;
 
-mixin AddLogger!();
-
 /// Used for better diagnostic
 private struct Connection
 {
@@ -96,6 +94,9 @@ private struct Connection
 
 public class Faucet : FaucetAPI
 {
+    /// General logger instance
+    public Logger log;
+
     /// Ledger instance
     private Ledger ledger;
 
@@ -157,6 +158,7 @@ public class Faucet : FaucetAPI
     public this (Config config)
     {
         this.config = config;
+        this.log = Logger(__MODULE__);
 
         // Create client for each address
         config.tx_generator.addresses.each!(address =>
@@ -580,10 +582,10 @@ int main (string[] args)
 
     config.tx_generator.keys.each!(kp => secret_keys.require(kp.address, kp.secret));
     validators = config.tx_generator.validator_public_keys;
-    log.trace("{}", config);
-
-    log.info("We'll be sending transactions to the following clients: {}", config.tx_generator.addresses);
     inst = new Faucet(config);
+
+    inst.log.trace("{}", config);
+    inst.log.info("We'll be sending transactions to the following clients: {}", config.tx_generator.addresses);
     inst.stats_server = new StatsServer(config.stats.address, config.stats.port);
 
     inst.sendTx = setTimer(config.tx_generator.send_interval.seconds, () => inst.send(), true);
@@ -605,7 +607,7 @@ private HTTPListener startListeningInterface (in ListenerConfig web, Faucet fauc
     /// By default, match the underlying files
     router.match(HTTPMethod.GET, "*", serveStaticFiles(path));
 
-    log.info("About to listen to HTTP: {}:{}", web.address, web.port.value);
+    inst.log.info("About to listen to HTTP: {}:{}", web.address, web.port.value);
     return listenHTTP(settings, router);
 }
 
