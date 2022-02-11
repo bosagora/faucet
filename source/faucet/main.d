@@ -89,8 +89,15 @@ private struct Connection
     public alias api this;
 }
 
-/// Holds the state of our application and contains update methods
-private struct State
+/*******************************************************************************
+
+    Implementation of the faucet API
+
+    This class implements the business code of the faucet.
+
+*******************************************************************************/
+
+public class Faucet : FaucetAPI
 {
     /// Ledger instance
     private Ledger ledger;
@@ -104,19 +111,184 @@ private struct State
     /// Keeps track of the freeze TXs faucet sent
     private Transaction[PublicKey] freeze_txs;
 
-    /// Get UTXOs owned by us that are spendable
-    private UTXO[Hash] getOwnedUTXOs () @safe
+    /// A storage to keep track of used UTXOs
+    private UTXO[Hash] used_utxos;
+
+    /// A client object implementing `API`
+    private Connection[] clients;
+
+    /// Minimum input value per output
+    /// This is to prevent transactions with too little input value to cover the fees.
+    private const minInputValuePerOutput = Amount(5_000_000);
+
+    /// Timer on which transactions are generated and send
+    public Timer sendTx;
+
+    /// Listener for the user interface, if any
+    public HTTPListener webInterface;
+
+    /***************************************************************************
+
+        Stats-related fields
+
+        Those fields are used to expose internal statistics about the faucet on
+        an HTTP interface that is ultimately queried by a Prometheus server.
+
+    ***************************************************************************/
+
+    /// Ditto
+    protected StatsServer stats_server;
+
+    /// Ditto
+    protected FaucetStats faucet_stats;
+
+    /// Ditto
+    mixin DefineCollectorForStats!("faucet_stats", "collectStats");
+
+    /***************************************************************************
+
+        Constructor
+
+        Params:
+          config = Config instance
+          address = The address (IPv4, IPv6, hostname) of the node
+
+    ***************************************************************************/
+
+    public this ()
     {
-        UTXO[Hash] result;
-        foreach (hash, utxo; this.ledger.utxos)
+        // Create client for each address
+        config.tx_generator.addresses.each!(address =>
+            this.clients ~= Connection(address, new RestInterfaceClient!API(address)));
+        mkdirRecurse(config.data.dir);
+        auto stateDB = new ManagedDatabase(config.data.dir.buildPath("faucet.db"));
+        auto params = makeConsensusParams(config.data.testing, config.consensus);
+        this.ledger = new Ledger(params, stateDB,
+            new BlockStorage(config.data.dir),
+            new ValidatorSet(stateDB, params));
+        Utils.getCollectorRegistry().addCollector(&this.collectStats);
+    }
+
+    /*******************************************************************************
+
+        Take one of the clients selecting it randomly
+
+        Returns:
+          A client to send transactions or requests
+
+    *******************************************************************************/
+
+    private Connection randomClient () @trusted
+    {
+        return choice(this.clients);
+    }
+
+    ///
+    private static Unlock keyUnlocker (in Transaction tx, in OutputRef out_ref) @safe nothrow
+    {
+        auto ownerSecret = secret_keys[out_ref.output.address];
+        assert(ownerSecret !is SecretKey.init,
+                "Address not known: " ~ out_ref.output.address.toString());
+
+        return genKeyUnlock(KeyPair.fromSeed(ownerSecret).sign(tx.getChallenge()));
+    }
+
+    /*******************************************************************************
+
+        Splits the Outputs from `utxo_rng` towards `count` random keys
+
+        The keys are continuous in an associative array.
+        We take `count` keys starting at a random position
+        (no less than `count` before the end).
+
+        Params:
+          UR = Range of tuple with an `Output` (`value`) and
+                 a `Hash` (`key`), as its first and second element, respectively
+          count = The number of keys up to the number of available keys
+            to spread the UTXOs to which will wrap around the keys if required
+
+        Returns:
+          A range of Transactions
+
+    *******************************************************************************/
+
+    private auto splitTx (UR) (UR utxo_rng, uint count)
+    {
+        static assert (isInputRange!UR);
+
+        return utxo_rng
+            .filter!(tup => tup.value.output.value >= minInputValuePerOutput * count)
+            .map!((kv)
+            {
+                this.sent_utxos.put(kv.key);
+                return TxBuilder(kv.value.output, kv.key);
+            })
+            .map!(txb => txb.unlockSigner(&this.keyUnlocker)
+                .split(
+                    secret_keys.byKey() // AA keys are addresses
+                    .cycle()    // cycle the range of keys as needed
+                    .drop(uniform(0, count, rndGen))    // start at some random position
+                    .take(count))
+                .sign());
+    }
+
+    /*******************************************************************************
+
+        Merges the Outputs from `utxo_rng` into a range of transactions
+        with a single input and output.
+
+        Params:
+          UR = Range of tuple with an `Output` (`value`) and
+          a `Hash` (`key`), as its first and second element, respectively
+
+        Returns:
+          A range of Transactions
+
+    *******************************************************************************/
+
+    private Transaction mergeTx (UR) (UR utxo_rng) @safe
+    {
+        static assert (isInputRange!UR);
+
+        // AA keys are addresses
+        auto builder = TxBuilder(
+            secret_keys.byKey().drop(uniform(0, secret_keys.length, rndGen)).front());
+        builder.attach(utxo_rng);
+        return builder.unlockSigner(&this.keyUnlocker).sign();
+    }
+
+    /*******************************************************************************
+
+        Perform setup and make sure there is enough UTXOs for us to use
+
+        Populate the ledger with the current state of node using `client`,
+        and create transactions that will spread all spendable transactions from
+        the last known block to `count` addresses.
+
+        Params:
+          client = An API instance to connect to a node
+          count = The number of keys to spread the transactions to
+
+    *******************************************************************************/
+
+    public void setup (uint count)
+    {
+        while (!this.update(randomClient()))
+            sleep(5.seconds);
+        const utxo_len = this.owned_utxos.length;
+
+        log.info("Setting up: height={}, {} UTXOs found", this.ledger.height(), utxo_len);
+        if (utxo_len < 200)
         {
-            if (utxo.output.address !in secret_keys)
-                continue;
-            if (utxo.output.type != OutputType.Payment)
-                continue;
-            result[hash] = utxo;
+            assert(utxo_len >= 1);
+            this.splitTx(this.owned_utxos.byKeyValue(), count)
+                .take(8)
+                .each!((tx)
+                {
+                    this.randomClient().postTransaction(tx);
+                    this.faucet_stats.increaseMetricBy!"faucet_transactions_sent_total"(1);
+                });
         }
-        return result;
     }
 
     /// Fetch blocks from a remote and add them to the Ledger
@@ -176,205 +348,6 @@ private struct State
         assert(this.owned_utxos.length);
         return true;
     }
-}
-
-/*******************************************************************************
-
-    Implementation of the faucet API
-
-    This class implements the business code of the faucet.
-
-*******************************************************************************/
-
-public class Faucet : FaucetAPI
-{
-    /// The state instance represents the current state of the application.
-    /// It is updated in the initial setup, and before a set of transactions
-    /// is sent. The update function takes the known height as a parameter,
-    /// and determines how many blocks it needs to catch up with. The UTXO set
-    /// for a certain height represents the state at that height. Therefore,
-    /// `updateUTXOCache` is called for every block until the latest block.
-    private State state = State.init;
-
-    /// A storage to keep track of used UTXOs
-    private UTXO[Hash] used_utxos;
-
-    /// A client object implementing `API`
-    private Connection[] clients;
-
-    /// Minimum input value per output
-    /// This is to prevent transactions with too little input value to cover the fees.
-    private const minInputValuePerOutput = Amount(5_000_000);
-
-    /// Timer on which transactions are generated and send
-    public Timer sendTx;
-
-    /// Listener for the user interface, if any
-    public HTTPListener webInterface;
-
-    /***************************************************************************
-
-        Stats-related fields
-
-        Those fields are used to expose internal statistics about the faucet on
-        an HTTP interface that is ultimately queried by a Prometheus server.
-
-    ***************************************************************************/
-
-    /// Ditto
-    protected StatsServer stats_server;
-
-    /// Ditto
-    protected FaucetStats faucet_stats;
-
-    /// Ditto
-    mixin DefineCollectorForStats!("faucet_stats", "collectStats");
-
-    /***************************************************************************
-
-        Constructor
-
-        Params:
-          config = Config instance
-          address = The address (IPv4, IPv6, hostname) of the node
-
-    ***************************************************************************/
-
-    public this ()
-    {
-        // Create client for each address
-        config.tx_generator.addresses.each!(address =>
-            this.clients ~= Connection(address, new RestInterfaceClient!API(address)));
-        mkdirRecurse(config.data.dir);
-        auto stateDB = new ManagedDatabase(config.data.dir.buildPath("faucet.db"));
-        auto params = makeConsensusParams(config.data.testing, config.consensus);
-        this.state.ledger = new Ledger(params, stateDB,
-            new BlockStorage(config.data.dir),
-            new ValidatorSet(stateDB, params));
-        Utils.getCollectorRegistry().addCollector(&this.collectStats);
-    }
-
-    /*******************************************************************************
-
-        Take one of the clients selecting it randomly
-
-        Returns:
-          A client to send transactions or requests
-
-    *******************************************************************************/
-
-    private Connection randomClient () @trusted
-    {
-        return choice(this.clients);
-    }
-
-    ///
-    private static Unlock keyUnlocker (in Transaction tx, in OutputRef out_ref) @safe nothrow
-    {
-        auto ownerSecret = secret_keys[out_ref.output.address];
-        assert(ownerSecret !is SecretKey.init,
-                "Address not known: " ~ out_ref.output.address.toString());
-
-        return genKeyUnlock(KeyPair.fromSeed(ownerSecret).sign(tx.getChallenge()));
-    }
-
-    /*******************************************************************************
-
-        Splits the Outputs from `utxo_rng` towards `count` random keys
-
-        The keys are continuous in an associative array.
-        We take `count` keys starting at a random position
-        (no less than `count` before the end).
-
-        Params:
-          UR = Range of tuple with an `Output` (`value`) and
-                 a `Hash` (`key`), as its first and second element, respectively
-          count = The number of keys up to the number of available keys
-            to spread the UTXOs to which will wrap around the keys if required
-
-        Returns:
-          A range of Transactions
-
-    *******************************************************************************/
-
-    private auto splitTx (UR) (UR utxo_rng, uint count)
-    {
-        static assert (isInputRange!UR);
-
-        return utxo_rng
-            .filter!(tup => tup.value.output.value >= minInputValuePerOutput * count)
-            .map!((kv)
-            {
-                this.state.sent_utxos.put(kv.key);
-                return TxBuilder(kv.value.output, kv.key);
-            })
-            .map!(txb => txb.unlockSigner(&this.keyUnlocker)
-                .split(
-                    secret_keys.byKey() // AA keys are addresses
-                    .cycle()    // cycle the range of keys as needed
-                    .drop(uniform(0, count, rndGen))    // start at some random position
-                    .take(count))
-                .sign());
-    }
-
-    /*******************************************************************************
-
-        Merges the Outputs from `utxo_rng` into a range of transactions
-        with a single input and output.
-
-        Params:
-          UR = Range of tuple with an `Output` (`value`) and
-          a `Hash` (`key`), as its first and second element, respectively
-
-        Returns:
-          A range of Transactions
-
-    *******************************************************************************/
-
-    private Transaction mergeTx (UR) (UR utxo_rng) @safe
-    {
-        static assert (isInputRange!UR);
-
-        // AA keys are addresses
-        auto builder = TxBuilder(
-            secret_keys.byKey().drop(uniform(0, secret_keys.length, rndGen)).front());
-        builder.attach(utxo_rng);
-        return builder.unlockSigner(&this.keyUnlocker).sign();
-    }
-
-    /*******************************************************************************
-
-        Perform state setup and make sure there is enough UTXOs for us to use
-
-        Populate the `state` variable with the current state of node using `client`,
-        and create transactions that will spread all spendable transactions from
-        the last known block to `count` addresses.
-
-        Params:
-          client = An API instance to connect to a node
-          count = The number of keys to spread the transactions to
-
-    *******************************************************************************/
-
-    public void setup (uint count)
-    {
-        while (!this.state.update(randomClient()))
-            sleep(5.seconds);
-        const utxo_len = this.state.owned_utxos.length;
-
-        log.info("Setting up: height={}, {} UTXOs found", this.state.ledger.height(), utxo_len);
-        if (utxo_len < 200)
-        {
-            assert(utxo_len >= 1);
-            this.splitTx(this.state.owned_utxos.byKeyValue(), count)
-                .take(8)
-                .each!((tx)
-                {
-                    this.randomClient().postTransaction(tx);
-                    this.faucet_stats.increaseMetricBy!"faucet_transactions_sent_total"(1);
-                });
-        }
-    }
 
     /*******************************************************************************
 
@@ -392,17 +365,17 @@ public class Faucet : FaucetAPI
 
     void send ()
     {
-        if (this.state.owned_utxos.length == 0)
+        if (this.owned_utxos.length == 0)
             this.setup(config.tx_generator.split_count);
 
-        if (this.state.update(randomClient()))
+        if (this.update(randomClient()))
         {
             // If we have no more utxo to use then let's clear sent_utxos as they may not have been externalized
-            if (this.state.owned_utxos.byKeyValue()
-                .filter!(kv => kv.key !in this.state.sent_utxos)
+            if (this.owned_utxos.byKeyValue()
+                .filter!(kv => kv.key !in this.sent_utxos)
                     .filter!(kv => kv.value.output.value >= minInputValuePerOutput).empty)
-                this.state.sent_utxos.clear();
-            log.trace("State has been updated: {}", this.state.ledger.height());
+                this.sent_utxos.clear();
+            log.trace("State has been updated: {}", this.ledger.height());
         }
 
         log.info("About to send transactions...");
@@ -410,9 +383,9 @@ public class Faucet : FaucetAPI
         // Sort them so we don't iterate multiple time
         // Note: This may cause a lot of memory usage, might need restructuing later
         // Mutable because of https://issues.dlang.org/show_bug.cgi?id=9792
-        auto sutxo = this.state.owned_utxos.values.sort!((a, b) => a.output.value < b.output.value);
+        auto sutxo = this.owned_utxos.values.sort!((a, b) => a.output.value < b.output.value);
         const size = sutxo.length();
-        const tsize = this.state.ledger.utxos.length();
+        const tsize = this.ledger.utxos.length();
         log.info("\tUTXO set: {}/{} UTXOs are owned by Faucet", size, tsize);
 
         if (sutxo.length)
@@ -427,14 +400,14 @@ public class Faucet : FaucetAPI
         }
 
         auto to_freeze_pks = validators.filter!((pk) {
-            return this.state.ledger.utxos.getUTXOs(pk).byValue.all!(utxo => utxo.output.type != OutputType.Freeze) &&
-                (pk !in this.state.freeze_txs || !this.randomClient().hasTransactionHash(this.state.freeze_txs[pk].hashFull));
+            return this.ledger.utxos.getUTXOs(pk).byValue.all!(utxo => utxo.output.type != OutputType.Freeze) &&
+                (pk !in this.freeze_txs || !this.randomClient().hasTransactionHash(this.freeze_txs[pk].hashFull));
         }).each!(pk => this.sendTo(pk.toString(), true));
 
-        if (this.state.owned_utxos.length > config.tx_generator.merge_threshold)
+        if (this.owned_utxos.length > config.tx_generator.merge_threshold)
         {
-            auto utxo_rng = this.state.owned_utxos.byKeyValue()
-                .filter!(kv => kv.key !in this.state.sent_utxos)
+            auto utxo_rng = this.owned_utxos.byKeyValue()
+                .filter!(kv => kv.key !in this.sent_utxos)
                 .filter!(kv => kv.value.output.value >= minInputValuePerOutput)
                 .take(uniform(2, config.tx_generator.merge_threshold, rndGen));
             if (utxo_rng.empty)
@@ -444,7 +417,7 @@ public class Faucet : FaucetAPI
                 auto tx = this.mergeTx(
                     utxo_rng.map!((kv)
                     {
-                        this.state.sent_utxos.put(kv.key);
+                        this.sent_utxos.put(kv.key);
                         return tuple(kv.value.output, kv.key);
                     }));
                 log.info("\tMERGE: Sending a tx of byte size: {}", tx.sizeInBytes);
@@ -456,8 +429,8 @@ public class Faucet : FaucetAPI
         else
         {
             auto rng = this.splitTx(
-                    this.state.owned_utxos.byKeyValue()
-                        .filter!(kv => kv.key !in this.state.sent_utxos),
+                    this.owned_utxos.byKeyValue()
+                        .filter!(kv => kv.key !in this.sent_utxos),
                     config.tx_generator.split_count)
                 .take(uniform(1, 10, rndGen));
             if (rng.empty)
@@ -475,10 +448,25 @@ public class Faucet : FaucetAPI
         }
     }
 
+    /// Get UTXOs owned by us that are spendable
+    private UTXO[Hash] getOwnedUTXOs () @safe
+    {
+        UTXO[Hash] result;
+        foreach (hash, utxo; this.ledger.utxos)
+        {
+            if (utxo.output.address !in secret_keys)
+                continue;
+            if (utxo.output.type != OutputType.Payment)
+                continue;
+            result[hash] = utxo;
+        }
+        return result;
+    }
+
     /// GET: /utxos
     public override UTXO[Hash] getUTXOs (PublicKey key) @safe nothrow
     {
-        return this.state.ledger.utxos.getUTXOs(key);
+        return this.ledger.utxos.getUTXOs(key);
     }
 
     /// POST: /send
@@ -498,7 +486,7 @@ public class Faucet : FaucetAPI
         PublicKey pubkey = PublicKey.fromString(recv);
         Amount amount = freeze ? 40_000.coins : 100.coins;
         Amount required = amount + (freeze ? 10_000.coins : 0.coins);
-        auto owned_utxo_rng = this.state.owned_utxos.byKeyValue()
+        auto owned_utxo_rng = this.owned_utxos.byKeyValue()
             // do not pick already used UTXOs
             .filter!(pair => pair.key !in this.used_utxos);
 
@@ -535,7 +523,7 @@ public class Faucet : FaucetAPI
         log.info("Sending {} BOA to {}", amount, recv);
         this.randomClient().postTransaction(tx);
         if (freeze)
-            this.state.freeze_txs[pubkey] = tx;
+            this.freeze_txs[pubkey] = tx;
         this.faucet_stats.increaseMetricBy!"faucet_transactions_sent_total"(1);
     }
 }
