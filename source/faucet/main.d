@@ -68,9 +68,6 @@ import vibe.web.rest;
 /// The keys that will be used for generating transactions
 private SecretKey[PublicKey] secret_keys;
 
-/// The configuration for faucet as a faucet and a tx generator
-private Config config;
-
 /// PublicKeys of validators that Faucet will freeze stakes for
 private PublicKey[] validators;
 
@@ -127,6 +124,9 @@ public class Faucet : FaucetAPI
     /// Listener for the user interface, if any
     public HTTPListener webInterface;
 
+    /// Configuration instance
+    private Config config;
+
     /***************************************************************************
 
         Stats-related fields
@@ -151,12 +151,13 @@ public class Faucet : FaucetAPI
 
         Params:
           config = Config instance
-          address = The address (IPv4, IPv6, hostname) of the node
 
     ***************************************************************************/
 
-    public this ()
+    public this (Config config)
     {
+        this.config = config;
+
         // Create client for each address
         config.tx_generator.addresses.each!(address =>
             this.clients ~= Connection(address, new RestInterfaceClient!API(address)));
@@ -366,7 +367,7 @@ public class Faucet : FaucetAPI
     void send ()
     {
         if (this.owned_utxos.length == 0)
-            this.setup(config.tx_generator.split_count);
+            this.setup(this.config.tx_generator.split_count);
 
         if (this.update(randomClient()))
         {
@@ -404,12 +405,12 @@ public class Faucet : FaucetAPI
                 (pk !in this.freeze_txs || !this.randomClient().hasTransactionHash(this.freeze_txs[pk].hashFull));
         }).each!(pk => this.sendTo(pk.toString(), true));
 
-        if (this.owned_utxos.length > config.tx_generator.merge_threshold)
+        if (this.owned_utxos.length > this.config.tx_generator.merge_threshold)
         {
             auto utxo_rng = this.owned_utxos.byKeyValue()
                 .filter!(kv => kv.key !in this.sent_utxos)
                 .filter!(kv => kv.value.output.value >= minInputValuePerOutput)
-                .take(uniform(2, config.tx_generator.merge_threshold, rndGen));
+                .take(uniform(2, this.config.tx_generator.merge_threshold, rndGen));
             if (utxo_rng.empty)
                 log.info("\tWaiting for unspent utxo");
             else
@@ -431,7 +432,7 @@ public class Faucet : FaucetAPI
             auto rng = this.splitTx(
                     this.owned_utxos.byKeyValue()
                         .filter!(kv => kv.key !in this.sent_utxos),
-                    config.tx_generator.split_count)
+                    this.config.tx_generator.split_count)
                 .take(uniform(1, 10, rndGen));
             if (rng.empty)
                 log.info("\tSPLIT: Waiting for unspent utxo");
@@ -582,7 +583,7 @@ int main (string[] args)
     log.trace("{}", config);
 
     log.info("We'll be sending transactions to the following clients: {}", config.tx_generator.addresses);
-    inst = new Faucet();
+    inst = new Faucet(config);
     inst.stats_server = new StatsServer(config.stats.address, config.stats.port);
 
     inst.sendTx = setTimer(config.tx_generator.send_interval.seconds, () => inst.send(), true);
