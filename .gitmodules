@@ -1,4 +1,3 @@
 [submodule "agora"]
 	path = submodules/agora
 	url = https://github.com/bosagora/agora.git
-	fetchRecurseSubmodules = true
