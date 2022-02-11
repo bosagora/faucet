@@ -565,13 +565,10 @@ int main (string[] args)
         sigaction(SIGTERM, &siginfo, null);
     }
 
-    try
-        config = parseConfigFile!(Config)(clargs);
-    catch (ConfigException exc)
-    {
-        stderr.writefln("%S", exc);
+    auto configN = parseConfigFileSimple!Config(clargs);
+    if (configN.isNull())
         return 1;
-    }
+    auto config = configN.get();
 
     foreach (const ref settings; config.logging)
     {
