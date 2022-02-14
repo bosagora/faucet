@@ -48,6 +48,7 @@ import configy.Read;
 import std.algorithm;
 import std.exception;
 import std.file;
+import std.functional : toDelegate;
 import std.format;
 import std.getopt;
 import std.path;
@@ -594,12 +595,48 @@ int main (string[] args)
     return runEventLoop();
 }
 
+private void restErrorHandler (
+    HTTPServerRequest req, HTTPServerResponse res, RestErrorInformation info)
+    @trusted
+{
+    // We don't use any info from the caller
+    cast(void) req;
+
+    static struct ErrorInfo
+    {
+        /// The error message itself
+        const(char)[] statusMessage;
+        debug
+        {
+            /// The stack trace
+            const(char)[] statusDebugMessage;
+        }
+    }
+
+    // If we are using a reusable exception, then we might need to save the
+    // error message in a buffer to avoid it being rewritten during a context
+    // switch to another fiber.
+    // `agora.common.Ensure : FormattedException` uses a 2kb buffer but we
+    // limit ourselves to much less in order to not consume half a page for this
+    char[512] buffer;
+    scope const msg = info.exception.message();
+    scope slice = buffer[0 .. msg.length > $ ? $ : msg.length];
+    slice[] = msg[];
+
+    // Send the full stack trace in debug mode (allocates quite a bit)
+    // We also always assume user error instead of internal server error
+    debug res.writeJsonBody(ErrorInfo(slice, info.exception.toString()), HTTPStatus.badRequest);
+    else  res.writeJsonBody(ErrorInfo(slice), HTTPStatus.badRequest);
+}
+
 private HTTPListener startListeningInterface (in ListenerConfig web, Faucet faucet)
 {
     auto settings = new HTTPServerSettings(web.address);
     settings.port = web.port;
     auto router = new URLRouter();
-    router.registerRestInterface(faucet);
+    auto rest_settings = new RestInterfaceSettings;
+    rest_settings.errorHandler = toDelegate(&restErrorHandler);
+    router.registerRestInterface(faucet, rest_settings);
 
     string path = getStaticFilePath();
     /// Convenience redirect, as users expect that accessing '/' redirect to index.html
