@@ -309,12 +309,12 @@ public class Faucet : FaucetAPI
         }
 
         log.trace("Peer {} is at height: {} (us: {})", client.address, remote, this.ledger.height);
-        while ((this.ledger.height() + 1) < remote)
+        while (this.ledger.height() < remote)
         {
             const(Block)[] blocks;
             const Height from = this.ledger.height + 1;
             log.info("Requesting blocks [{} .. {}] from {}", from, remote, client.address);
-            const max_blocks = cast(uint) (remote - from);
+            const max_blocks = cast(uint) (remote - from) + 1;
             try
                 blocks = client.getBlocksFrom(from, max_blocks);
             catch (Exception exc)
