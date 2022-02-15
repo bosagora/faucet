@@ -123,6 +123,9 @@ public class Faucet : FaucetAPI
     /// Timer on which transactions are generated and send
     public Timer sendTx;
 
+    /// Timer on which we atttempt to update the state
+    private Timer updateTimer;
+
     /// Listener for the user interface, if any
     public HTTPListener webInterface;
 
@@ -295,6 +298,21 @@ public class Faucet : FaucetAPI
         }
     }
 
+    /// Triggered every `block_interval` to ensure Faucet works even with
+    /// its tx generator disabled
+    private void update () @trusted
+    {
+        if (this.update(this.randomClient()))
+        {
+            // If we have no more utxo to use then let's clear sent_utxos as they may not have been externalized
+            if (this.owned_utxos.byKeyValue()
+                .filter!(kv => kv.key !in this.sent_utxos)
+                    .filter!(kv => kv.value.output.value >= minInputValuePerOutput).empty)
+                this.sent_utxos.clear();
+            log.trace("State has been updated: {}", this.ledger.height());
+        }
+    }
+
     /// Fetch blocks from a remote and add them to the Ledger
     private bool update (Connection client) @safe
     {
@@ -371,16 +389,6 @@ public class Faucet : FaucetAPI
     {
         if (this.owned_utxos.length == 0)
             this.setup(this.config.tx_generator.split_count);
-
-        if (this.update(randomClient()))
-        {
-            // If we have no more utxo to use then let's clear sent_utxos as they may not have been externalized
-            if (this.owned_utxos.byKeyValue()
-                .filter!(kv => kv.key !in this.sent_utxos)
-                    .filter!(kv => kv.value.output.value >= minInputValuePerOutput).empty)
-                this.sent_utxos.clear();
-            log.trace("State has been updated: {}", this.ledger.height());
-        }
 
         log.info("About to send transactions...");
 
@@ -589,6 +597,7 @@ int main (string[] args)
     inst.log.info("We'll be sending transactions to the following clients: {}", config.tx_generator.addresses);
     inst.stats_server = new StatsServer(config.stats.address, config.stats.port);
 
+    inst.updateTimer = setTimer(config.consensus.block_interval, &inst.update, true);
     inst.sendTx = setTimer(config.tx_generator.send_interval.seconds, () => inst.send(), true);
     if (config.web.address.length)
         inst.webInterface = startListeningInterface(config.web, inst);
@@ -683,6 +692,8 @@ private SigHandlerT getSignalHandler () @safe pure nothrow @nogc
             inst.webInterface.stopListening();
             inst.webInterface = typeof(inst.webInterface).init;
             inst.stats_server.shutdown();
+            inst.updateTimer.stop();
+            inst.updateTimer = Timer.init;
             inst.sendTx.stop();
             inst.sendTx = inst.sendTx.init;
             printf("Terminating event loop...\n");
