@@ -304,10 +304,8 @@ public class Faucet : FaucetAPI
     {
         if (this.update(this.randomClient()))
         {
-            // If we have no more utxo to use then let's clear sent_utxos as they may not have been externalized
-            if (this.owned_utxos.byKeyValue()
-                .filter!(kv => kv.key !in this.sent_utxos)
-                    .filter!(kv => kv.value.output.value >= minInputValuePerOutput).empty)
+            // clear sent UTXOs on zero TX block
+            if (this.ledger.lastBlock().txs.length == 0)
                 this.sent_utxos.clear();
             log.trace("State has been updated: {}", this.ledger.height());
         }
