@@ -533,7 +533,9 @@ public class Faucet : FaucetAPI
             .draw(amount, [pubkey])
             .sign(freeze ? OutputType.Freeze : OutputType.Payment);
         log.info("Sending {} BOA to {}", amount, recv);
-        this.randomClient().postTransaction(tx);
+        TransactionResult result = this.randomClient().postTransaction(tx);
+        ensure(result.status == TransactionResult.Status.Accepted,
+            "Transaction is {}: {}", result.status, result.reason);
         if (freeze)
             this.freeze_txs[pubkey] = tx;
         this.faucet_stats.increaseMetricBy!"faucet_transactions_sent_total"(1);
