@@ -416,24 +416,30 @@ public class Faucet : FaucetAPI
 
         if (this.owned_utxos.length > this.config.tx_generator.merge_threshold)
         {
-            auto utxo_rng = this.owned_utxos.byKeyValue()
-                .filter!(kv => kv.key !in this.sent_utxos)
-                .filter!(kv => kv.value.output.value >= minInputValuePerOutput)
-                .take(this.config.tx_generator.split_count);
-            if (utxo_rng.empty)
-                log.info("\tWaiting for unspent utxo");
-            else
+            foreach (_; 0..uniform(1, 10, rndGen))
             {
-                auto tx = this.mergeTx(
-                    utxo_rng.map!((kv)
-                    {
-                        this.sent_utxos.put(kv.key);
-                        return tuple(kv.value.output, kv.key);
-                    }));
-                log.info("\tMERGE: Sending a tx of byte size: {}", tx.sizeInBytes);
-                this.randomClient().postTransaction(tx);
-                log.dbg("Transaction sent (merge): {}", tx);
-                this.faucet_stats.increaseMetricBy!"faucet_transactions_sent_total"(1);
+                auto utxo_rng = this.owned_utxos.byKeyValue()
+                    .filter!(kv => kv.key !in this.sent_utxos)
+                    .filter!(kv => kv.value.output.value >= minInputValuePerOutput)
+                    .take(this.config.tx_generator.split_count);
+                if (utxo_rng.empty)
+                {
+                    log.info("\tWaiting for unspent utxo");
+                    break;
+                }
+                else
+                {
+                    auto tx = this.mergeTx(
+                        utxo_rng.map!((kv)
+                        {
+                            this.sent_utxos.put(kv.key);
+                            return tuple(kv.value.output, kv.key);
+                        }));
+                    log.info("\tMERGE: Sending a tx of byte size: {}", tx.sizeInBytes);
+                    this.randomClient().postTransaction(tx);
+                    log.dbg("Transaction sent (merge): {}", tx);
+                    this.faucet_stats.increaseMetricBy!"faucet_transactions_sent_total"(1);
+                }
             }
         }
         else
