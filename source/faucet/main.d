@@ -18,6 +18,7 @@ module faucet.main;
 import faucet.API;
 import faucet.config;
 import faucet.stats;
+import faucet.server;
 
 import agora.api.FullNode;
 import agora.common.Amount;
@@ -37,7 +38,6 @@ import agora.crypto.Hash;
 import agora.crypto.Key;
 import agora.script.Signature;
 import agora.serialization.Serializer;
-import agora.stats.Server;
 import agora.stats.Utils;
 import agora.utils.Test;
 import agora.script.Lock;
