@@ -40,6 +40,7 @@ import agora.script.Signature;
 import agora.serialization.Serializer;
 import agora.stats.Utils;
 import agora.utils.Test;
+import agora.utils.TxBuilder;
 import agora.script.Lock;
 import agora.utils.Log;
 
