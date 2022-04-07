@@ -68,7 +68,7 @@ import vibe.inet.url;
 import vibe.web.rest;
 
 /// The keys that will be used for generating transactions
-private SecretKey[PublicKey] secret_keys;
+private KeyPair[PublicKey] known_keys;
 
 /// PublicKeys of validators that Faucet will freeze stakes for
 private PublicKey[] validators;
@@ -133,6 +133,9 @@ public class Faucet : FaucetAPI
     /// Configuration instance
     private Config config;
 
+    /// TxBuilder with key unlocker for known keys
+    alias TxBuilder = StaticTransactionBuilder!keyUnlocker;
+
     /***************************************************************************
 
         Stats-related fields
@@ -191,14 +194,14 @@ public class Faucet : FaucetAPI
         return choice(this.clients);
     }
 
-    ///
-    private static Unlock keyUnlocker (in Transaction tx, in OutputRef out_ref) @safe nothrow
+    /// Key unlocker for the keys known by this faucet
+    private static Unlock keyUnlocker (in Transaction tx, in OutputRef out_ref)
+        @safe nothrow
     {
-        auto ownerSecret = secret_keys[out_ref.output.address];
-        assert(ownerSecret !is SecretKey.init,
-                "Address not known: " ~ out_ref.output.address.toString());
-
-        return genKeyUnlock(KeyPair.fromSeed(ownerSecret).sign(tx.getChallenge()));
+        auto ownerKP = known_keys[out_ref.output.address];
+        assert(ownerKP !is KeyPair.init,
+            "Address not known: " ~ out_ref.output.address.toString());
+        return genKeyUnlock(ownerKP.sign(tx.getChallenge()));
     }
 
     /*******************************************************************************
@@ -233,7 +236,7 @@ public class Faucet : FaucetAPI
             })
             .map!(txb => txb.unlockSigner(&this.keyUnlocker)
                 .split(
-                    secret_keys.byKey() // AA keys are addresses
+                    known_keys.byKey() // AA keys are addresses
                     .cycle()    // cycle the range of keys as needed
                     .drop(uniform(0, count, rndGen))    // start at some random position
                     .take(count))
@@ -260,7 +263,7 @@ public class Faucet : FaucetAPI
 
         // AA keys are addresses
         auto builder = TxBuilder(
-            secret_keys.byKey().drop(uniform(0, secret_keys.length, rndGen)).front());
+            known_keys.byKey().drop(uniform(0, known_keys.length, rndGen)).front());
         builder.attach(utxo_rng);
         return builder.unlockSigner(&this.keyUnlocker).sign();
     }
@@ -471,7 +474,7 @@ public class Faucet : FaucetAPI
         UTXO[Hash] result;
         foreach (hash, utxo; this.ledger.utxos)
         {
-            if (utxo.output.address !in secret_keys)
+            if (utxo.output.address !in known_keys)
                 continue;
             if (utxo.output.type != OutputType.Payment)
                 continue;
@@ -596,7 +599,7 @@ int main (string[] args)
         configureLogger(settings, true);
     }
 
-    config.tx_generator.keys.each!(kp => secret_keys.require(kp.address, kp.secret));
+    config.tx_generator.keys.each!(kp => known_keys.require(kp.address, kp));
     validators = config.tx_generator.validator_public_keys;
     inst = new Faucet(config);
 
