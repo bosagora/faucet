@@ -173,7 +173,7 @@ public class Faucet : FaucetAPI
             this.clients ~= Connection(address, new RestInterfaceClient!API(address)));
         mkdirRecurse(config.data.dir);
         auto stateDB = new ManagedDatabase(config.data.dir.buildPath("faucet.db"));
-        auto params = makeConsensusParams(config.data.testing, config.consensus);
+        auto params = makeConsensusParams(config);
         this.ledger = new Ledger(params, stateDB,
             new BlockStorage(config.data.dir),
             new ValidatorSet(stateDB, params));
@@ -726,13 +726,34 @@ private SigHandlerT getSignalHandler () @safe pure nothrow @nogc
 
 /// Make a new instance of the consensus parameters based on the config
 /// Adapted from `FullNode.makeConsensusConfig`
-public static makeConsensusParams (bool testing, in ConsensusConfig config)
+public static makeConsensusParams (in Config config)
 {
     import TESTNET = agora.consensus.data.genesis.Test;
     import COINNET = agora.consensus.data.genesis.Coinnet;
 
+    auto commons_budget = config.data.testing ?
+        TESTNET.CommonsBudgetAddress : COINNET.CommonsBudgetAddress;
+
+    immutable Genesis = () {
+        if (!config.data.testing)
+            return COINNET.GenesisBlock;
+        if (!config.data.test_validators)
+            return TESTNET.GenesisBlock;
+
+        immutable Block result = {
+            header: {
+                merkle_root: TESTNET.GenesisBlock.header.merkle_root,
+                validators: typeof(BlockHeader.validators)(config.data.test_validators),
+                enrollments: TESTNET.GenesisBlock.header.enrollments[0 .. config.data.test_validators],
+            },
+            merkle_tree: TESTNET.GenesisBlock.merkle_tree,
+            txs:         TESTNET.GenesisBlock.txs,
+        };
+        return result;
+    }();
+
     return new immutable(ConsensusParams)(
-        testing ? TESTNET.GenesisBlock : COINNET.GenesisBlock,
-        testing ? TESTNET.CommonsBudgetAddress : COINNET.CommonsBudgetAddress,
-        config);
+            Genesis,
+            commons_budget,
+            config.consensus);
 }

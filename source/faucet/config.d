@@ -119,6 +119,8 @@ public struct DataConfig
     /// Whether the network is in testing mode or not
     public bool testing;
 
+    public @Optional ubyte test_validators;
+
     /// Where to write the Ledger data to
     public string dir = "data";
 }
