@@ -62,7 +62,6 @@ consensus:
   block_interval:
     seconds: 5
   validator_cycle: 20
-  genesis_timestamp: 1649316800
 
 logging:
   root:
