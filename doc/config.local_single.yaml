@@ -57,6 +57,8 @@ tx_generator:
 
 data:
   testing: true
+  test_validators: 1
+  dir: .single/data/
 
 consensus:
   block_interval:
@@ -65,5 +67,5 @@ consensus:
 
 logging:
   root:
-    level: Info
+    level: Trace
     console: true
