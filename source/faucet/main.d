@@ -413,8 +413,8 @@ public class Faucet : FaucetAPI
             log.info("\tL: {}, H: {}", sutxo[0].output.value, sutxo[$-1].output.value);
         }
 
-        auto to_freeze_pks = validators.filter!((pk) {
-            return this.ledger.utxos.getUTXOs(pk).byValue.all!(utxo => utxo.output.type != OutputType.Freeze) &&
+        validators.filter!((pk) {
+            return this.ledger.utxos.getUTXOs(pk).byKeyValue.all!(kv => !this.ledger.isStake(kv.key, kv.value.output)) &&
                 (pk !in this.freeze_txs || !this.randomClient().hasTransactionHash(this.freeze_txs[pk].hashFull));
         }).each!(pk => this.sendTo(pk.toString(), true));
 
