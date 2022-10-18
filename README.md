@@ -4,7 +4,7 @@ Your friendly transaction-happy bot
 
 ## Description
 
-Faucet's goal is to generate transactions for BOSAGORA's network.
+Faucet's goal is to generate transactions for the POC Agora Blockchain network.
 This involves a broad array of use cases:
 - As a test tool, it can generate transaction in test setups;
 - As the name suggest, it can also be used as a faucet for TestNet;
